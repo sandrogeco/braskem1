@@ -15,28 +15,33 @@ from seisLib import alert
 from obspy import  UTCDateTime
 import numpy as np
 
-al=alert('seismic.alerts')
+# al=alert('seismic.alerts')
+#
+#
+#
+# st=['LK_BRK0','LK_BRK1','LK_BRK2','LK_BRK3','LK_BRK4']
+# cl=[('LK_BRK0','LK_BRK1'),('LK_BRK1','LK_BRK2')]
+# te=UTCDateTime(2020,8,26,4,0,0)
+#
+# al._a['utc_time'] = "'" + UTCDateTime(te-600).strftime("%Y-%m-%d %H:%M:%S")  + "'"
+# al._a['utc_time_str'] = "'" + UTCDateTime(te-600).strftime("%Y-%m-%d %H:%M:%S")  + "'"
+# al._a['event_type'] = "'HR_AMT'"
+# al._a['station'] = "'LK_BRK0'"
+# al._a['level'] = 1
+# al.insert()
+# al._a['utc_time'] = "'" + UTCDateTime(te-200).strftime("%Y-%m-%d %H:%M:%S")  + "'"
+# al._a['utc_time_str'] = "'" + UTCDateTime(te-200).strftime("%Y-%m-%d %H:%M:%S")  + "'"
+# al._a['event_type'] = "'HR_AMT'"
+# al._a['station'] = "'LK_BRK1'"
+# al._a['level'] = 2
+# al.insert()
+#
+# al.clusterStation(te,cl,3600,'HR_AMT')
 
 
 
-st=['LK_BRK0','LK_BRK1','LK_BRK2','LK_BRK3','LK_BRK4']
-cl=[('LK_BRK0','LK_BRK1'),('LK_BRK1','LK_BRK2')]
-te=UTCDateTime(2020,8,26,4,0,0)
+import seisLib
 
-al._a['utc_time'] = "'" + UTCDateTime(te-600).strftime("%Y-%m-%d %H:%M:%S")  + "'"
-al._a['utc_time_str'] = "'" + UTCDateTime(te-600).strftime("%Y-%m-%d %H:%M:%S")  + "'"
-al._a['event_type'] = "'HR_AMT'"
-al._a['station'] = "'LK_BRK0'"
-al._a['level'] = 1
-al.insert()
-al._a['utc_time'] = "'" + UTCDateTime(te-200).strftime("%Y-%m-%d %H:%M:%S")  + "'"
-al._a['utc_time_str'] = "'" + UTCDateTime(te-200).strftime("%Y-%m-%d %H:%M:%S")  + "'"
-al._a['event_type'] = "'HR_AMT'"
-al._a['station'] = "'LK_BRK1'"
-al._a['level'] = 2
-al.insert()
+stz=seisLib.stations(['BRK0','BRK1','BRK2'],'LK')
 
-al.clusterStation(te,cl,3600,'HR_AMT')
-
-
-
+print('pippo')

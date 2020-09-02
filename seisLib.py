@@ -34,12 +34,54 @@ band = {
 rTWindow = 360
 rtSft = 2
 
-class stattion():
-    _status=0
+class stations():
+    _stations={}
+
+    def __init__(self,sts,net,table='seismic.alerts'):
+        for s in sts:
+            self._stations[net+"_"+s]=station(s,net)
+
+        self._table = table
+
+
+    def updateStationStatus(self):
+        self.connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
+                                       password='Bebedouro77627')
+        for station in self._stations.values():
+            station.update()
+            sql = "update seismic.stations set status=" + str(station._status) + ",latency=" + str(station._latency) + " where name='" + str(
+                station._intName) + "';"
+            self.connection.cursor().execute(sql)
+            self.connection.commit()
+
+        self.connection.close()
+
+
+class station():
+    _alerts={
+        'CL_HR':0
+    }
+    _status=1
     _latency=0
     _name=''
+    _network=''
+    _intName=''
+    _maxLatency=15
+
+    def __init__(self,name,net):
+        self._name=name
+        self._network=net
+        self._intName=self._network+"_"+self._name
+
+    def update(self):
+        if self._latency>self._maxLatency:
+            self._status=0
+        else:
+            self._status=self._alerts['CL_HR']+1
+
 
 class alert():
+    _stations=stations
     _a={
         'id_alert':"''",
         'utc_time':'',
@@ -92,11 +134,11 @@ class alert():
     def __del__(self):
         self.connection.close()
 
-    def updateStationStatus(self,stationName,status,latency):
-
-        sql="update seismic.stations set status="+str(status)+",latency="+str(latency)+" where name='"+str(stationName)+"';"
-        self.connection.cursor().execute(sql)
-        self.connection.commit()
+    # def updateStationStatus(self,stationName,status,latency):
+    #
+    #     sql="update seismic.stations set status="+str(status)+",latency="+str(latency)+" where name='"+str(stationName)+"';"
+    #     self.connection.cursor().execute(sql)
+    #     self.connection.commit()
 
 
     def insert(self,clause=''):
@@ -116,10 +158,10 @@ class alert():
             # sql = sql[0:-1]
             # sql+=") " +clause+" ;"
             self.connection.cursor().execute(sql)
-
+            self.connection.commit()
         except:
             pass
-        self.connection.commit()
+
 
     def getAlerts(self,ts,te,station='', event_type='',extra=''):
         r = False
@@ -196,7 +238,7 @@ class alert():
         while 1<2:
             if te<UTCDateTime.now():
                 for s in st:
-                    print(te)
+                    print('PP')
                     self.hourlyRate(te, s, 'AML')
                     self.hourlyRate(te, s, 'AMH')
                     self.clusterStation(te, self._clusters, 3600, 'HR_AML')
@@ -236,8 +278,12 @@ class alert():
                 self._a['station'] = "'" + s + "'"
                 self._a['level'] = l
                 self.insert()
-            for st in stGroup:
-                self.updateStationStatus(st, l+1, 0)
+
+            self._stations._stations[st]._alerts['CL_HR']=l
+
+        self._stations.updateStationStatus()
+            # for st in stGroup:
+            #     self.updateStationStatus(st, l+1, 0)
 
 
 class drumPlot(Client):
@@ -248,7 +294,7 @@ class drumPlot(Client):
         'lastDrum': UTCDateTime.now(),
     }
 
-    _file = 'tr.mseed'  # 'traces.mseed'
+    _stations=stations
     _traces = Stream()
     _inv = read_inventory("metadata/Braskem_metadata.xml")
     _rtSft = rtSft
@@ -330,6 +376,9 @@ class drumPlot(Client):
             station = spl[1]
             channel = spl[3]
             l = int(self._tEnd - tr.stats['endtime'])
+
+            self._stations._stations[network+"_"+station]._latency=l
+
             self._status[station] = {}
             self._status[station]["Noise Level"] = "---"
             self._status[station]["Latency"] = str(l) + 's'
@@ -344,9 +393,11 @@ class drumPlot(Client):
                 appTrace.filter('bandpass', freqmin=bb[0], freqmax=bb[1], corners=2, zerophase=True)
                 self.plotDrum(appTrace, self._basePathRT + 'RT/' + fileNameRT)
 
-        with open(self._basePathRT + 'RT/geophone_network_status.json', 'w') as fp:
-            json.dump(self._status, fp)
-            fp.close()
+        self._stations.updateStationStatus()
+
+        # with open(self._basePathRT + 'RT/geophone_network_status.json', 'w') as fp:
+        #     json.dump(self._status, fp)
+        #     fp.close()
 
         print('realTime end ' + UTCDateTime.now().strftime("%Y%m%d %H%M%S"))
         self._rtRunning = False
@@ -385,103 +436,6 @@ class drumPlot(Client):
                         self.plotDrum(appTrace, self._basePath + fileName)
         self._hyRunning = False
 
-    # def hystElab(self):
-    #     tStart = self._tEnd - 1440 * 60
-    #     for e in self._elabHyst:
-    #         p = e.split('_')
-    #         network = p[0]
-    #         station = p[1]
-    #         p = self._basePath + network + '/' + station + '/' + 'ELAB' + '/' + str(tStart.year) + '/' + str(
-    #             tStart.month) + '/' + str(
-    #             tStart.day) + '/'+tStart.strftime("%Y%m%d%H")+ '00.json'#ELAB_' + e + '.json'
-    #         if not os.path.exists(os.path.dirname(p)):
-    #             os.makedirs(os.path.dirname(p))
-    #         # el = self._elabHyst[e]
-    #         with open(p, 'w') as fp:
-    #             json.dump(list(self._elabHyst[e].values()), fp)
-    #             fp.close()
-    #         self._elabHyst[e]={}
-    #
-    # def elab(self):
-    #     self._elRunning = True
-    #
-    #
-    #
-    #     tStart = self._tEnd - 60
-    #     s = np.asarray(self.get_all_nslc())
-    #
-    #     intTrace=self._2minRTraces.copy()
-    #     intTrace.trim(tStart, self._tEnd)
-    #
-    #     for network in np.unique(s[:, 0]):
-    #         for station in np.unique(s[:, 1]):
-    #             print('elab ' + station)
-    #             stTrace = intTrace.select(network, station)
-    #             elab = {
-    #                 'ts': np.long(self._tEnd.strftime("%Y%m%d%H%M%S"))
-    #
-    #             }
-    #             # TREMOR
-    #             nTr = network + '_' + station
-    #             # f = self.elabWhere(nTr, (self._tEnd - 3600).strftime("%Y%m%d%H%M%S"),
-    #             #                    self._tEnd.strftime("%Y%m%d%H%M%S"))
-    #             for appTrace in stTrace:
-    #                 rms = {}
-    #                 id = appTrace.get_id()
-    #                 spl = id.split('.')
-    #                 channel = spl[3]
-    #                 elab[channel] = {}
-    #                 # tStart = self._tEnd - 60
-    #                 # appTrace = tr.copy()
-    #                 # appTrace.trim(tStart, self._tEnd)
-    #                 # appTrace.remove_response(self._inv)
-    #
-    #                 for b in band:
-    #                     bb = band[b]
-    #                     trF = appTrace.copy()
-    #                     trF.filter('bandpass', freqmin=bb[0], freqmax=bb[1], corners=2, zerophase=True)
-    #                     rms[b] = np.sqrt(np.mean(trF.data ** 2))
-    #                     elab[channel]['rms_' + b] = str("%0.2e" % rms[b])
-    #                     # HC_rms = np.sum([float(s[channel]['rms_' + b]) for s in f])
-    #                     # elab[channel]['HC_rms_' + b] = str("%0.2e" % HC_rms)
-    #
-    #             try:
-    #                 self._elab[nTr][elab['ts']] = elab
-    #                 self._elabHyst[nTr][elab['ts']] = elab
-    #             except:
-    #                 self._elab[nTr] = {}
-    #                 self._elab[nTr][elab['ts']] = elab
-    #                 self._elabHyst[nTr] = {}
-    #                 self._elabHyst[nTr][elab['ts']] = elab
-    #
-    #             # pulisco e slavo
-    #             m = np.long((self._tEnd - 1440 * 60).strftime("%Y%m%d%H%M%S"))
-    #             mm = np.min(list(self._elab[nTr].keys()))
-    #             if mm < m:
-    #                 self._elab[nTr].pop(mm)
-    #             for e in self._elab:
-    #                 filename = self._basePathRT + 'RT/ELAB_' + e + '.json'
-    #
-    #                 with open(filename, 'w') as fp:
-    #                     json.dump(list(self._elab[e].values()), fp)
-    #                     fp.close()
-    #
-    #
-    #
-    #     np.savez(self._basePath+'elSave',h=self._elabHyst,e=self._elab)
-    #     self._elRunning = False
-    #
-    # def elabWhere(self,id,ts,te):
-    #     r=[]
-    #     ts=np.long(ts)
-    #     te=np.long(te)
-    #     try:
-    #         for x in (y for y in self._elab[id].keys() if (y > ts) & (y < te)):
-    #             r.append(self._elab[id][x])
-    #     except:
-    #         pass
-    #     return r
-    #
 
 
     def An(self,table='seismic.alerts'):
@@ -571,27 +525,6 @@ class drumPlot(Client):
 
             a.insert()
 
-    # def stationStatus(self):
-    #     connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
-    #                                   password='Bebedouro77627')
-    #     s = np.asarray(self.get_all_nslc())
-    #     for network in np.unique(s[:, 0]):
-    #         for station in np.unique(s[:, 1]):
-    #             nTr = network + '_' + station
-    #             self._stationStatus[nTr] = {
-    #                 'name': nTr,
-    #                 'coord': self._inv.get_coordinates(network + '.' + station + '..EHZ'),
-    #                 'status': 0,
-    #                 'latency': 0
-    #             }
-    #
-    #             sql = "delete from seismic.station where name='" + nTr +";"
-    #             sql+=" insert into seismic.station (name, lat,lon,elev,status, latency) VALUES ("+self._sstationstatus['name']
-    #             +","+self._stationStatus['coord']['latitude']+","+self._stationStatus['coord']['longitude']+","+self._stationStatus['coord']['elevation']+","+
-    #             +self._stationStatus['status'] + ","+self._stationStatus['latency']+");"
-    #             connection.cursor().execute(sql)
-    #             connection.commit()
-    #     connection.close()
 
 
 
