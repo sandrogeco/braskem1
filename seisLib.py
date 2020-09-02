@@ -204,7 +204,7 @@ class alert():
                 te=te+self._rTh['sft']*3600
 
             else:
-                print('waiting')
+                print('PP_waiting')
                 time.sleep(100)
             with open('lastDet.json', 'w') as fp:
                 s = {k: self._log[k].strftime("%Y-%m-%d %H:%M:%S") for k in self._log}

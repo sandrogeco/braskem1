@@ -25,16 +25,41 @@
 #   File "drumPlotHyst_1.4_utl.py", line 21 in <module>
 # Segmentation fault (core dumped)
 
-
+import multiprocessing
 
 from seisLib import drumPlot
-
+import seisLib
+import numpy as np
 
 from obspy import  UTCDateTime
 
-client = drumPlot('/mnt/ide/seed/')
+client = seisLib.drumPlot('/mnt/ide/seed/')
 
 client._alertTable='seismic.alerts'
 client._basePath = '/home/geoapp/'
-client._basePathRT = '/mnt/geoAppServer/' # '/home/sandro/Documents/mSeedTest/'#'#
-client.run('LK', 'BRK?', 'E??',False )
+client._basePathRT = '/mnt/geoAppServer/'
+#client.run('LK', 'BRK?', 'E??',False )
+
+rawPrc=multiprocessing.Process(target=client.run, args=('LK', 'BRK?', 'E??',False,))
+rawPrc.start()
+
+al=seisLib.alert('seismic.alerts')
+
+
+
+st=['LK_BRK0','LK_BRK1','LK_BRK2','LK_BRK3','LK_BRK4']
+cl=[('LK_BRK0','LK_BRK2'),('LK_BRK1','LK_BRK2'),('LK_BRK1','LK_BRK4'),('LK_BRK3','LK_BRK4')]
+
+al._rateX=np.arange(0,100,1)
+al._amplY=np.arange(0.01,-0.0001,-0.0001)
+al._thMatrix=np.zeros([len(al._amplY),len(al._rateX)])
+al._thMatrix[0:np.where(al._amplY>0.0003)[0][-1],5:]=1
+al._thMatrix[0:np.where(al._amplY>0.0008)[0][-1],20:]=2
+al._thMatrix[0:np.where(al._amplY>0.002)[0][-1],40:]=3
+al._clusters=cl
+
+
+#al.HR_run(st)
+
+postPrc=multiprocessing.Process(target=al.HR_run, args=(st,))
+postPrc.start()
