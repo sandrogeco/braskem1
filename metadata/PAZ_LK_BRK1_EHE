@@ -1,0 +1,32 @@
+* **************************************************
+* NETWORK   (KNETWK): LK
+* STATION    (KSTNM): BRK1
+* LOCATION   (KHOLE):
+* CHANNEL   (KCMPNM): EHE
+* CREATED     : 2020-06-23T15:45:22
+* START       : 2020-05-01T00:00:01
+* END         : 2599-12-31T23:59:59
+* DESCRIPTION : 
+* LATITUDE    : -9.634298
+* LONGITUDE   : -35.750206
+* ELEVATION   : 2.0
+* DEPTH       : 0.0
+* DIP (SEED)  : 0.0
+* AZIMUTH     : 0.0
+* SAMPLE RATE : 250.0
+* INPUT UNIT  : M
+* OUTPUT UNIT : COUNTS
+* INSTTYPE    : velocimeter
+* INSTGAIN    : 89.44 (M/S)
+* COMMENT           : N/A
+* SENSITIVITY : 365053933.394 (M/S)
+* A0          : 1.0
+* **************************************************
+ZEROS 3
+ +0.000000e+00 +0.000000e+00
+ +0.000000e+00 +0.000000e+00
+ +0.000000e+00 +0.000000e+00
+POLES 2
+ -2.007840e+01 +1.916930e+01
+ -2.007840e+01 -1.916930e+01
+CONSTANT 3.650539e+08

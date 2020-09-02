@@ -1,0 +1,33 @@
+* **************************************************
+* NETWORK   (KNETWK): LK
+* STATION    (KSTNM): BRK0
+* LOCATION   (KHOLE):
+* CHANNEL   (KCMPNM): HNN
+* CREATED     : 2020-06-23T15:45:22
+* START       : 2020-05-01T00:00:01
+* END         : 2599-12-31T23:59:59
+* DESCRIPTION : 
+* LATITUDE    : -9.640309
+* LONGITUDE   : -35.7457
+* ELEVATION   : 7.0
+* DEPTH       : 0.0
+* DIP (SEED)  : 0.0
+* AZIMUTH     : 0.0
+* SAMPLE RATE : 250.0
+* INPUT UNIT  : M
+* OUTPUT UNIT : COUNTS
+* INSTTYPE    : accelerometer
+* INSTGAIN    : 0.2488692 (M/S**2)
+* COMMENT           : N/A
+* SENSITIVITY : 26095.9424643 (M/S**2)
+* A0          : 2720382000000000.0
+* **************************************************
+ZEROS 2
+ +0.000000e+00 +0.000000e+00
+ +0.000000e+00 +0.000000e+00
+POLES 4
+ -2.763739e+03 -6.672258e+03
+ -2.763739e+03 +6.672258e+03
+ -6.672258e+03 -2.763739e+03
+ -6.672258e+03 +2.763739e+03
+CONSTANT 7.099093e+19
