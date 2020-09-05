@@ -37,20 +37,34 @@ rtSft = 2
 class stations():
     _stations={}
 
-    def __init__(self,sts,net,table='seismic.alerts'):
+    def __init__(self,sts,net,table='seismic.stations'):
         for s in sts:
             self._stations[net+"_"+s]=station(s,net)
 
         self._table = table
 
 
-    def updateStationStatus(self):
+    def updateStationLatency(self):
         self.connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
                                        password='Bebedouro77627')
         for station in self._stations.values():
             station.update()
-            sql = "update seismic.stations set status=" + str(station._status) + ",latency=" + str(station._latency) + " where name='" + str(
+            sql = "update "+self._table+" set latency=" + str(station._latency) + " where name='" + str(
                 station._intName) + "';"
+            self.connection.cursor().execute(sql)
+            self.connection.commit()
+
+        self.connection.close()
+
+    def updateStationStatus(self):
+
+        self.connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
+                                       password='Bebedouro77627')
+        for station in self._stations.values():
+            station.update()
+            sql = "update "+self._table+" set status=" + str(station._status) +  " where name='" + str(
+                station._intName) + "';"
+            print(sql)
             self.connection.cursor().execute(sql)
             self.connection.commit()
 
@@ -58,9 +72,8 @@ class stations():
 
 
 class station():
-    _alerts={
-        'CL_HR':0
-    }
+    _CL_HR=0
+    _HR=0
     _status=1
     _latency=0
     _name=''
@@ -74,14 +87,15 @@ class station():
         self._intName=self._network+"_"+self._name
 
     def update(self):
+
         if self._latency>self._maxLatency:
             self._status=0
         else:
-            self._status=self._alerts['CL_HR']+1
-
+            self._status=self._CL_HR+1
 
 class alert():
     _stations=stations
+    _confFile='pp.json'
     _a={
         'id_alert':"''",
         'utc_time':'',
@@ -125,6 +139,9 @@ class alert():
     _amplY=[]
     _thMatrix=[]
     _clusters=[]
+    _clTh={
+        'lag':3600
+    }
 
     def __init__(self,table=''):
         self.connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
@@ -134,15 +151,8 @@ class alert():
     def __del__(self):
         self.connection.close()
 
-    # def updateStationStatus(self,stationName,status,latency):
-    #
-    #     sql="update seismic.stations set status="+str(status)+",latency="+str(latency)+" where name='"+str(stationName)+"';"
-    #     self.connection.cursor().execute(sql)
-    #     self.connection.commit()
-
 
     def insert(self,clause=''):
-        #l=self.getLastSta(self._a['station'],self._a['event_type'])
         try:
             t=UTCDateTime.strptime(self._a['utc_time'],"'%Y-%m-%d %H:%M:%S'")
             self._a['utc_time']=t.strftime("'%Y-%m-%d %H:%M:00'")
@@ -153,10 +163,6 @@ class alert():
             sql = sql[0:-1]
             sql += " WHERE NOT EXISTS( SELECT * FROM " + self._table + " WHERE utc_time=" + self._a['utc_time'] + \
                    " AND  station=" + self._a['station'] + " AND event_type=" + self._a['event_type'] + ");"
-
-            # sql+=") VALUES (".join(str(s)+"," for s in self._a.values())
-            # sql = sql[0:-1]
-            # sql+=") " +clause+" ;"
             self.connection.cursor().execute(sql)
             self.connection.commit()
         except:
@@ -223,8 +229,11 @@ class alert():
             r=True
         return r
 
+    def multiPr_HR_run(self,st):
+        postPrc = multiprocessing.Process(target=self.HR_run, args=(st,))
+        postPrc.start()
 
-    def HR_run(self,st,te=UTCDateTime.now()):
+    def HR_run(self,st):
         try:
             with open('lastDet.json', 'r') as fp:
                 p=json.load(fp)
@@ -241,13 +250,16 @@ class alert():
                     print('PP')
                     self.hourlyRate(te, s, 'AML')
                     self.hourlyRate(te, s, 'AMH')
-                    self.clusterStation(te, self._clusters, 3600, 'HR_AML')
+
+                self.clusterStation(te, self._clusters, self._clTh['lag'], 'HR_AML')
                 self._log['lastElab']=te
                 te=te+self._rTh['sft']*3600
 
             else:
                 print('PP_waiting')
-                time.sleep(100)
+                time.sleep(10)
+
+
             with open('lastDet.json', 'w') as fp:
                 s = {k: self._log[k].strftime("%Y-%m-%d %H:%M:%S") for k in self._log}
                 json.dump(s, fp)
@@ -255,35 +267,41 @@ class alert():
 
     def clusterStation(self,te,cl,lag=3600,evType='HR_AML'):
         for stGroup in cl:
+            print('CLUSTER AN')
             a = []
+            ll=[]
             l = 0
             n = 0
             s = ""
             try:
                 for st in stGroup:
-
                     if self.getAlerts(te - np.int(lag), te, st, evType): # 'ORDER BY utc_time DESC LIMIT 1'):
-                        l += np.max([a['level'] for a in self._aList])
-                        n += 1
-                        s += st + "-"
-                l = np.int(l / n)
-                s=s[0:-1]
+                        l=np.max([a['level'] for a in self._aList])
+                        if l>0:
+                            ll.append(l)
+                            n += 1
+                #     s += st + "-"
+                # s=s[0:-1]
             except:
                 pass
 
-            if n == len(stGroup):
-                self._a['utc_time'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
-                self._a['utc_time_str'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
-                self._a['event_type'] = "'CL_" + evType + "'"
-                self._a['station'] = "'" + s + "'"
-                self._a['level'] = l
-                self.insert()
+            if len(ll) == len(stGroup):
+                l=np.max(ll)
+                for st in stGroup:
+                    self._a['utc_time'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
+                    self._a['utc_time_str'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
+                    self._a['event_type'] = "'CL_" + evType + "'"
+                    self._a['station'] = "'" + st + "'"
+                    self._a['level'] = l
+                    self.insert()
 
-            self._stations._stations[st]._alerts['CL_HR']=l
-
+        for sts in self._stations._stations.keys():
+            if self.getAlerts(te - np.int(lag), te, sts, 'CL_HR_AML'):
+                l = np.max([a['level'] for a in self._aList])
+            else:
+                l=0
+            self._stations._stations[sts]._CL_HR=l
         self._stations.updateStationStatus()
-            # for st in stGroup:
-            #     self.updateStationStatus(st, l+1, 0)
 
 
 class drumPlot(Client):
@@ -393,7 +411,7 @@ class drumPlot(Client):
                 appTrace.filter('bandpass', freqmin=bb[0], freqmax=bb[1], corners=2, zerophase=True)
                 self.plotDrum(appTrace, self._basePathRT + 'RT/' + fileNameRT)
 
-        self._stations.updateStationStatus()
+        self._stations.updateStationLatency()
 
         # with open(self._basePathRT + 'RT/geophone_network_status.json', 'w') as fp:
         #     json.dump(self._status, fp)
@@ -525,10 +543,12 @@ class drumPlot(Client):
 
             a.insert()
 
+    def multiPr_run(self,network, station, channel):
+        prc = multiprocessing.Process(target=self.run, args=(network, station, channel))
+        prc.start()
 
 
-
-    def run(self, network, station, channel,rt=True):
+    def run(self, network, station, channel):
         logging.basicConfig(filename='log.log', level='WARNING',format='%(asctime)s %(message)s')
         tStart = UTCDateTime()
         try:
@@ -571,7 +591,6 @@ class drumPlot(Client):
 
             if self._tNow.second < self._lastData.second:
                 self._tEnd = self._tNow
-
 
 
                 print('getting traces')
@@ -624,7 +643,7 @@ class drumPlot(Client):
     def getCasp(self):
         connection = psycopg2.connect(host='172.16.8.10', port='5432', database='casp_events', user='sismoweb',
                                       password='lun1t3k@@')
-        sql = 'SELECT event_id, t0, lat, lon, dpt, magWA FROM auto_eventi'
+        sql = 'SELECT event_id, t0, lat, lon, dpt, magWA FROM auto_eventi ORDER BY event_id DESC LIMIT 10'
         cursor = connection.cursor()
         cursor.execute(sql)
         p=cursor.fetchall()
