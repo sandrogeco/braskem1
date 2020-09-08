@@ -16,8 +16,10 @@ import numpy as np
 
 from obspy import  UTCDateTime
 
-stz=seisLib.stations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK')
+#stz=seisLib.stations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK')
 sysStz=seisLib.sysStations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK','seismic.stationsTST')
+
+print('pippo')
 def rawProcess(sysStz):
 
     client = seisLib.drumPlot('/mnt/ide/seed/')
@@ -25,7 +27,7 @@ def rawProcess(sysStz):
     client._alertTable='seismic.alerts'
     client._basePath = '/home/geoapp/'
     client._basePathRT = '/mnt/geoAppServer/'
-    client._stations=stz
+
     client._amplAn = {
         'lowFW': [1, 20],
         'highFW': [20, 50],
@@ -35,7 +37,10 @@ def rawProcess(sysStz):
     }
     client._sysStations=sysStz
     #client.multiPr_run('LK', 'BRK?', 'E??' )
-    client.run('LK', 'BRK?', 'E??')
+    #client.run('LK', 'BRK?', 'E??')
+    while 1<2:
+        time.sleep(10)
+        print('rr')
 
 
 def postProcess(sysStz):
@@ -45,7 +50,7 @@ def postProcess(sysStz):
 
 
     al=seisLib.alert('seismic.alerts')
-    al._stations=stz
+
 
     al._th = {  # soglie su cui definire rate
         'AML': 0.00005,
@@ -71,7 +76,10 @@ def postProcess(sysStz):
 
     al._sysStations=sysStz
     #al.multiPr_HR_run(st)
-    al.HR_run(st)
+    #al.HR_run(st)
+    while 1<2:
+        time.sleep(10)
+        print('pp')
 
 
 def t():
@@ -79,15 +87,16 @@ def t():
         time.sleep(10)
 
 
-if __name__ == '__main__':
+pr = multiprocessing.Process(target=rawProcess, name='RAW', args=(sysStz,))
+pr.start()
 
-    pr = multiprocessing.Process(target=rawProcess, name='RAW', args=(sysStz,))
-    pr.start()
+pp = multiprocessing.Process(target=postProcess, name='PP', args=(sysStz,))
+pp.start()
 
-    pp = multiprocessing.Process(target=postProcess, name='PP', args=(sysStz,))
-    pp.start()
+while 1<2:
+    time.sleep(10)
+
+pr.join()
+pp.join()
 
 
-
-    pr.join()
-    pp.join()

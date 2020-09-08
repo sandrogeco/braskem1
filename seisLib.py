@@ -7,6 +7,7 @@ from obspy.core.stream import Stream
 from obspy.clients.filesystem.sds import Client
 
 import multiprocessing
+from multiprocessing import Event
 import obspy.signal.polarization
 from obspy import read_inventory
 import obspy.signal
@@ -36,8 +37,8 @@ rtSft = 2
 
 class stations():
     _stations={}
-
     def __init__(self,sts,net,table='seismic.stations'):
+
         for s in sts:
             self._stations[net+"_"+s]=station(s,net)
 
@@ -49,7 +50,7 @@ class stations():
                                        password='Bebedouro77627')
         for station in self._stations.values():
             station.update()
-            sql = "update "+self._table+" set latency=" + str(station._latency) + " where name='" + str(
+            sql = "update "+self._table+" set latency=" + str(station._latency) +", status=" + str(station._status)+" where name='" + str(
                 station._intName) + "';"
             self.connection.cursor().execute(sql)
             self.connection.commit()
@@ -81,10 +82,13 @@ class station():
     _intName=''
     _maxLatency=15
 
+
     def __init__(self,name,net):
         self._name=name
         self._network=net
         self._intName=self._network+"_"+self._name
+
+
 
     def update(self):
 
@@ -93,8 +97,74 @@ class station():
         else:
             self._status=self._CL_HR+1
 
+
+class sysStations():
+
+    def __init__(self,sts,net,table='seismic.stations'):
+        self._stations=multiprocessing.Manager().dict()
+        for s in sts:
+            self._stations[net+"_"+s]=sysStation(s,net)
+
+        self._table = table
+
+
+
+
+    def updateStz(self,*args):#key,attr,value):
+        if len(args)==1:
+            a=args[0]
+            key=a._intName
+
+        if len(args)==3:
+            key=args[0]
+            attr=args[1]
+            value=args[2]
+            a=self._stations[key]
+            a.__setattr__(attr,value)
+
+        if a._latency > a._maxLatency:
+            a._status = 0
+        else:
+            a._status =a._CL_HR + 1
+
+        self._stations[key]=a
+        self.updateDB(a)
+
+    def updateDB(self,station):
+        sql = "update " + self._table + " set latency=" + str(station._latency) + ", status=" + str(
+            station._status) + " where name='" + str(
+            station._intName) + "';"
+        try:
+            self.connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
+                                               password='Bebedouro77627')
+            self.connection.cursor().execute(sql)
+            self.connection.commit()
+            self.connection.close()
+        except:
+            print('DB update failed')
+            pass
+
+class sysStation():
+    _CL_HR=0
+    _HR=0
+    _status=1
+    _latency=0
+    _name=''
+    _network=''
+    _intName=''
+    _maxLatency=15
+
+
+    def __init__(self,name,net):
+        self._name=name
+        self._network=net
+        self._intName=self._network+"_"+self._name
+
+
+
 class alert():
     _stations=stations
+    _sysStations=sysStations
     _confFile='pp.json'
     _a={
         'id_alert':"''",
@@ -229,9 +299,6 @@ class alert():
             r=True
         return r
 
-    def multiPr_HR_run(self,st):
-        postPrc = multiprocessing.Process(target=self.HR_run, args=(st,))
-        postPrc.start()
 
     def HR_run(self,st):
         try:
@@ -268,11 +335,8 @@ class alert():
     def clusterStation(self,te,cl,lag=3600,evType='HR_AML'):
         for stGroup in cl:
             print('CLUSTER AN')
-            a = []
             ll=[]
-            l = 0
             n = 0
-            s = ""
             try:
                 for st in stGroup:
                     if self.getAlerts(te - np.int(lag), te, st, evType): # 'ORDER BY utc_time DESC LIMIT 1'):
@@ -280,11 +344,9 @@ class alert():
                         if l>0:
                             ll.append(l)
                             n += 1
-                #     s += st + "-"
-                # s=s[0:-1]
             except:
                 pass
-
+            l=0
             if len(ll) == len(stGroup):
                 l=np.max(ll)
                 for st in stGroup:
@@ -294,14 +356,15 @@ class alert():
                     self._a['station'] = "'" + st + "'"
                     self._a['level'] = l
                     self.insert()
+            self._sysStations.updateStz(st,'_CL_HR',l)
 
-        for sts in self._stations._stations.keys():
-            if self.getAlerts(te - np.int(lag), te, sts, 'CL_HR_AML'):
-                l = np.max([a['level'] for a in self._aList])
-            else:
-                l=0
-            self._stations._stations[sts]._CL_HR=l
-        self._stations.updateStationStatus()
+        # for sts in self._stations._stations.keys():
+        #     if self.getAlerts(te - np.int(lag), te, sts, 'CL_HR_AML'):
+        #         l = np.max([a['level'] for a in self._aList])
+        #     else:
+        #         l=0
+        #     self._stations._stations[sts]._CL_HR=l
+        # self._stations.updateStationStatus()
 
 
 class drumPlot(Client):
@@ -313,6 +376,7 @@ class drumPlot(Client):
     }
 
     _stations=stations
+    _sysStations = sysStations
     _traces = Stream()
     _inv = read_inventory("metadata/Braskem_metadata.xml")
     _rtSft = rtSft
@@ -394,9 +458,8 @@ class drumPlot(Client):
             station = spl[1]
             channel = spl[3]
             l = int(self._tEnd - tr.stats['endtime'])
-
-            self._stations._stations[network+"_"+station]._latency=l
-
+            if channel=='EHZ':
+                self._sysStations.updateStz(network+"_"+station,'_latency',l)
             self._status[station] = {}
             self._status[station]["Noise Level"] = "---"
             self._status[station]["Latency"] = str(l) + 's'
@@ -411,11 +474,9 @@ class drumPlot(Client):
                 appTrace.filter('bandpass', freqmin=bb[0], freqmax=bb[1], corners=2, zerophase=True)
                 self.plotDrum(appTrace, self._basePathRT + 'RT/' + fileNameRT)
 
-        self._stations.updateStationLatency()
+ #       self._stations.updateStationLatency()
 
-        # with open(self._basePathRT + 'RT/geophone_network_status.json', 'w') as fp:
-        #     json.dump(self._status, fp)
-        #     fp.close()
+
 
         print('realTime end ' + UTCDateTime.now().strftime("%Y%m%d %H%M%S"))
         self._rtRunning = False
@@ -543,9 +604,6 @@ class drumPlot(Client):
 
             a.insert()
 
-    def multiPr_run(self,network, station, channel):
-        prc = multiprocessing.Process(target=self.run, args=(network, station, channel))
-        prc.start()
 
 
     def run(self, network, station, channel):
@@ -642,8 +700,8 @@ class drumPlot(Client):
 
     def getCasp(self):
         connection = psycopg2.connect(host='172.16.8.10', port='5432', database='casp_events', user='sismoweb',
-                                      password='lun1t3k@@')
-        sql = 'SELECT event_id, t0, lat, lon, dpt, magWA FROM auto_eventi ORDER BY event_id DESC LIMIT 10'
+                                      password='lun1t3k@@',connect_timeout=10)
+        sql = 'SELECT event_id, t0, lat, lon, dpt, magWA,reliable FROM auto_eventi ORDER BY event_id DESC LIMIT 100'
         cursor = connection.cursor()
         cursor.execute(sql)
         p=cursor.fetchall()
@@ -656,7 +714,8 @@ class drumPlot(Client):
                 'lat':np.float(pp[2]),
                 'lon':np.float(pp[3]),
                 'dpt':np.float(pp[4]),
-                'mag':np.float(pp[5])
+                'mag':np.float(pp[5]),
+                'rel':pp[6]
             }
             self._events.append(e)
 
@@ -665,11 +724,16 @@ class drumPlot(Client):
                                       password='Bebedouro77627')
         for e in self._events:
 
-            sql = 'INSERT INTO seismic.events_casp (geom,lat,lon,utc_time,utc_time_str,magnitudo,depth,id_casp) ' \
+            sql = 'INSERT INTO seismic.events_casp (geom,lat,lon,utc_time,utc_time_str,magnitudo,depth,id_casp,rel) ' \
                   "VALUES (ST_GeomFromText('POINT(" + str(e['lon']) + ' ' + str(e['lat']) + ")', 4326),"\
-                  + str(e['lat']) + ','+ str(e['lon'])+ ",'"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+ "','"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+"',"+str(e['mag'])+','+ str(e['dpt'])  +','+e['id']+") ON CONFLICT DO NOTHING;"
+                  + str(e['lat']) + ','+ str(e['lon'])+ ",'"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+ "','"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+"',"+str(e['mag'])+','+ str(e['dpt'])  +','+e['id']+","+str(e['rel'])+") ON CONFLICT DO NOTHING;"
             connection.cursor().execute(sql)
             connection.commit()
+
+            sql='INSERT INTO seismic.alerts (lat,lon,utc_time,utc_time_str,magnitudo,depth,id_casp,rel)'\
+                ' VALUES ('+ str(e['lat']) + ','+ str(e['lon'])+ ",'"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+ "','"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+"',"+str(e['mag'])+','+ str(e['dpt'])  +','+e['id']+","+str(e['rel'])+")
+
+
 
     def pushIntEv(self,e,table='seismic.events_swarm',id='id_swarm'):
         connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
