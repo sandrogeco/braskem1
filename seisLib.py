@@ -35,68 +35,68 @@ band = {
 rTWindow = 360
 rtSft = 2
 
-class stations():
-    _stations={}
-    def __init__(self,sts,net,table='seismic.stations'):
-
-        for s in sts:
-            self._stations[net+"_"+s]=station(s,net)
-
-        self._table = table
-
-
-    def updateStationLatency(self):
-        self.connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
-                                       password='Bebedouro77627')
-        for station in self._stations.values():
-            station.update()
-            sql = "update "+self._table+" set latency=" + str(station._latency) +", status=" + str(station._status)+" where name='" + str(
-                station._intName) + "';"
-            self.connection.cursor().execute(sql)
-            self.connection.commit()
-
-        self.connection.close()
-
-    def updateStationStatus(self):
-
-        self.connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
-                                       password='Bebedouro77627')
-        for station in self._stations.values():
-            station.update()
-            sql = "update "+self._table+" set status=" + str(station._status) +  " where name='" + str(
-                station._intName) + "';"
-            print(sql)
-            self.connection.cursor().execute(sql)
-            self.connection.commit()
-
-        self.connection.close()
-
-
-class station():
-    _CL_HR=0
-    _HR=0
-    _status=1
-    _latency=0
-    _name=''
-    _network=''
-    _intName=''
-    _maxLatency=15
-
-
-    def __init__(self,name,net):
-        self._name=name
-        self._network=net
-        self._intName=self._network+"_"+self._name
-
-
-
-    def update(self):
-
-        if self._latency>self._maxLatency:
-            self._status=0
-        else:
-            self._status=self._CL_HR+1
-
+# class stations():
+#     _stations={}
+#     def __init__(self,sts,net,table='seismic.stations'):
+#
+#         for s in sts:
+#             self._stations[net+"_"+s]=station(s,net)
+#
+#         self._table = table
+#
+#
+#     def updateStationLatency(self):
+#         self.connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
+#                                        password='Bebedouro77627')
+#         for station in self._stations.values():
+#             station.update()
+#             sql = "update "+self._table+" set latency=" + str(station._latency) +", status=" + str(station._status)+" where name='" + str(
+#                 station._intName) + "';"
+#             self.connection.cursor().execute(sql)
+#             self.connection.commit()
+#
+#         self.connection.close()
+#
+#     def updateStationStatus(self):
+#
+#         self.connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
+#                                        password='Bebedouro77627')
+#         for station in self._stations.values():
+#             station.update()
+#             sql = "update "+self._table+" set status=" + str(station._status) +  " where name='" + str(
+#                 station._intName) + "';"
+#             print(sql)
+#             self.connection.cursor().execute(sql)
+#             self.connection.commit()
+#
+#         self.connection.close()
+#
+#
+# class station():
+#     _CL_HR=0
+#     _HR=0
+#     _status=1
+#     _latency=0
+#     _name=''
+#     _network=''
+#     _intName=''
+#     _maxLatency=15
+#
+#
+#     def __init__(self,name,net):
+#         self._name=name
+#         self._network=net
+#         self._intName=self._network+"_"+self._name
+#
+#
+#
+#     def update(self):
+#
+#         if self._latency>self._maxLatency:
+#             self._status=0
+#         else:
+#             self._status=self._CL_HR+1
+#
 
 class sysStations():
 
@@ -113,22 +113,56 @@ class sysStations():
     def updateStz(self,*args):#key,attr,value):
         if len(args)==1:
             a=args[0]
-            key=a._intName
+            key=[a._intName]
 
         if len(args)==3:
-            key=args[0]
+            key=[args[0]]
+            if key=='*':
+                key=[s._intName for s in self._stations]
             attr=args[1]
             value=args[2]
-            a=self._stations[key]
-            a.__setattr__(attr,value)
 
+        for k in key:
+            latencyOld=self._stations[k]
+            statusOld=self._stations[k]
+            a=self._stations[k]
+            a.__setattr__(attr,value)
+            self.statusCalc(a,k)
+            if (a._latency!=latencyOld) or (a._status!=statusOld):
+                self.updateDB(a)
+
+        # if a._latency > a._maxLatency:
+        #     a._status = 0
+        # else:
+        #     a._status =a._CL_HR + 1
+        #
+        # self._stations[key]=a
+        # self.updateDB(a)
+    #
+    # def updateAllStz(self,*args):#key,attr,value):
+    #     for s in self._stations:
+    #         key=s._intName
+    #         if len(args)==1:
+    #             a=args[0]
+    #             #key=a._intName
+    #
+    #         if len(args)==3:
+    #             #key=args[0]
+    #             attr=args[0]
+    #             value=args[1]
+    #             a=self._stations[key]
+    #             a.__setattr__(attr,value)
+    #
+    #         self.statusCalc(a, key)
+
+    def statusCalc(self,a,key):
         if a._latency > a._maxLatency:
             a._status = 0
         else:
-            a._status =a._CL_HR + 1
+            l=np.max([a._CL_HR,a._HR,a._AM,a._MAG])
+            a._status = l + 1
 
-        self._stations[key]=a
-        self.updateDB(a)
+        self._stations[key] = a
 
     def updateDB(self,station):
         sql = "update " + self._table + " set latency=" + str(station._latency) + ", status=" + str(
@@ -147,6 +181,10 @@ class sysStations():
 class sysStation():
     _CL_HR=0
     _HR=0
+    _AM=0
+    _MAG=0
+    _lastAlertType=''
+    _lastAlertTime=UTCDateTime
     _status=1
     _latency=0
     _name=''
@@ -163,7 +201,7 @@ class sysStation():
 
 
 class alert():
-    _stations=stations
+    # _stations=stations
     _sysStations=sysStations
     _confFile='pp.json'
     _a={
@@ -186,7 +224,13 @@ class alert():
         'lon':0,
         'note':"''",
         'rate':0,
-        'level':0
+        'level':0,
+        'magnitudo':0,
+        'id_casp':0,
+        'depth':0,
+        'rel':False,
+        'erh':0,
+        'erz':0
     }
     _log = {
         'lastElab': UTCDateTime.now()
@@ -197,11 +241,13 @@ class alert():
 
     _th={#soglie su cui definire rate
         'AML':0.00005,
-        'AMH':0.00005
+        'AMH':0.00005,
+        'CASP':0
     }
     _rTh = {#soglie rate
         'AML': 0,
         'AMH': 0,
+        'CASP':0,
         'wnd':1,
         'sft':0.25
     }
@@ -222,11 +268,15 @@ class alert():
         self.connection.close()
 
 
-    def insert(self,clause=''):
+    def insert(self,s0=True,clause=''):
         try:
             t=UTCDateTime.strptime(self._a['utc_time'],"'%Y-%m-%d %H:%M:%S'")
-            self._a['utc_time']=t.strftime("'%Y-%m-%d %H:%M:00'")
-            self._a['utc_time_str']=t.strftime("'%Y-%m-%d %H:%M:00'")
+            if s0:
+                self._a['utc_time']=t.strftime("'%Y-%m-%d %H:%M:00'")
+                self._a['utc_time_str']=t.strftime("'%Y-%m-%d %H:%M:00'")
+            else:
+                self._a['utc_time'] = t.strftime("'%Y-%m-%d %H:%M:%S'")
+                self._a['utc_time_str'] = t.strftime("'%Y-%m-%d %H:%M:%S'")
             sql = "INSERT INTO " + self._table + " ("+"".join(str(s) + "," for s in self._a.keys())
             sql = sql[0:-1]
             sql += ") SELECT "+"".join( str(s) + "," for s in self._a.values())
@@ -270,6 +320,34 @@ class alert():
 
         return r
 
+    def hourlyRateMag(self,te,station,type='CASP'):
+        print(te)
+        r=False
+        ts=te-3600*self._rTh['wnd']
+        self.getAlerts(ts,te,station,type)
+        aa=[]
+        for a in self._aList:
+            if a['magnitudo']>self._th[type]:
+                aa.append(a)
+
+        if len(aa)>self._rTh[type]:
+            self._a['utc_time'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
+            self._a['utc_time_str'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
+            self._a['event_type'] = "'HR_"+type+"'"
+            self._a['rate'] = len(aa)/self._rTh['wnd']
+            ampl = np.mean(self._a['magnitudo'])
+            fR = np.where(self._rateX >= self._a['rate'])[0]
+            fA = np.where(self._amplY <= ampl)[0]
+            fR = fR[0]
+            fA = fA[0]
+            self._a['level'] = np.int(self._thMatrix[fA, fR])
+            print(type+' '+station+' '+str(self._a['rate'])+' '+str(self._a['level']))
+            self.insert()
+            # self._sysStations.updateStz(station, '_CL_HR', l)
+            r=True
+        return r
+
+
     def hourlyRate(self,te,station,type='AML'):
         r=False
         ts=te-3600*self._rTh['wnd']
@@ -300,7 +378,7 @@ class alert():
         return r
 
 
-    def HR_run(self,st):
+    def HR_run(self,st,aType):
         try:
             with open('lastDet.json', 'r') as fp:
                 p=json.load(fp)
@@ -313,17 +391,26 @@ class alert():
 
         while 1<2:
             if te<UTCDateTime.now():
-                for s in st:
-                    print('PP')
-                    self.hourlyRate(te, s, 'AML')
-                    self.hourlyRate(te, s, 'AMH')
 
-                self.clusterStation(te, self._clusters, self._clTh['lag'], 'HR_AML')
+                if 'AML' in aType:
+                    print('AML ' + te.strftime("%Y-%m-%d %H:%M:%S"))
+                    for s in st:
+                        self.hourlyRate(te, s, 'AML')
+                if 'AMH' in aType:
+                    print('AMH ' + te.strftime("%Y-%m-%d %H:%M:%S"))
+                    for s in st:
+                        self.hourlyRate(te, s, 'AMH')
+                if 'CASP' in aType:
+                    print('CASP ' + te.strftime("%Y-%m-%d %H:%M:%S"))
+                    self.hourlyRateMag(te,'*','CASP')
+                if 'CL' in aType:
+                    print('CL ' + te.strftime("%Y-%m-%d %H:%M:%S"))
+                    self.clusterStation(te, self._clusters, self._clTh['lag'], 'HR_AML')
+
                 self._log['lastElab']=te
                 te=te+self._rTh['sft']*3600
 
             else:
-                print('PP_waiting')
                 time.sleep(10)
 
 
@@ -375,7 +462,7 @@ class drumPlot(Client):
         'lastDrum': UTCDateTime.now(),
     }
 
-    _stations=stations
+
     _sysStations = sysStations
     _traces = Stream()
     _inv = read_inventory("metadata/Braskem_metadata.xml")
@@ -701,7 +788,7 @@ class drumPlot(Client):
     def getCasp(self):
         connection = psycopg2.connect(host='172.16.8.10', port='5432', database='casp_events', user='sismoweb',
                                       password='lun1t3k@@',connect_timeout=10)
-        sql = 'SELECT event_id, t0, lat, lon, dpt, magWA,reliable FROM auto_eventi ORDER BY event_id DESC LIMIT 100'
+        sql = 'SELECT event_id, t0, lat, lon, dpt, magWA,reliable,erh,erz FROM auto_eventi ORDER BY event_id DESC LIMIT 10'
         cursor = connection.cursor()
         cursor.execute(sql)
         p=cursor.fetchall()
@@ -715,7 +802,9 @@ class drumPlot(Client):
                 'lon':np.float(pp[3]),
                 'dpt':np.float(pp[4]),
                 'mag':np.float(pp[5]),
-                'rel':pp[6]
+                'rel':pp[6],
+                'erh':np.float(pp[7]),
+                'erz':np.float(pp[8])
             }
             self._events.append(e)
 
@@ -729,9 +818,29 @@ class drumPlot(Client):
                   + str(e['lat']) + ','+ str(e['lon'])+ ",'"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+ "','"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+"',"+str(e['mag'])+','+ str(e['dpt'])  +','+e['id']+","+str(e['rel'])+") ON CONFLICT DO NOTHING;"
             connection.cursor().execute(sql)
             connection.commit()
+            connection.close()
+            #
 
-            sql='INSERT INTO seismic.alerts (lat,lon,utc_time,utc_time_str,magnitudo,depth,id_casp,rel)'\
-                ' VALUES ('+ str(e['lat']) + ','+ str(e['lon'])+ ",'"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+ "','"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+"',"+str(e['mag'])+','+ str(e['dpt'])  +','+e['id']+","+str(e['rel'])+")
+            a = alert()
+            a._a['utc_time'] = "'" + UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S") + "'"
+            a._a['utc_time_str'] = "'" + UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S") + "'"
+            a._a['event_type'] = "'CASP'"
+            a._a['station'] = "'*'"
+            a._a['lat'] =e['lat']
+            a._a['lon'] = e['lon']
+            a._a['magnitudo'] = e['mag']
+            a._a['depth'] = e['dpt']
+            a._a['id_casp'] = e['id']
+            a._a['rel'] = e['rel']
+            a._a['erh'] = e['erh']
+            a._a['erz'] = e['erz']
+            a.insert(False)
+            #
+            # sql='INSERT INTO seismic.alerts (station,lat,lon,utc_time,utc_time_str,magnitudo,depth,id_casp,rel,event_type)'\
+            #    " SELECT '*',"+ str(e['lat']) + ','+ str(e['lon'])+ ",'"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+ "','"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+"',"+str(e['mag'])+','+ str(e['dpt'])  +','+e['id']+","+str(e['rel'])+\
+            #    ",'CASP' WHERE NOT EXISTS( SELECT * FROM seismic.alerts  WHERE id_casp="+e['id'] + ");"
+            # connection.cursor().execute(sql)
+            # connection.commit()
 
 
 

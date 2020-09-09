@@ -16,8 +16,8 @@ import numpy as np
 
 from obspy import  UTCDateTime
 
-stz=seisLib.stations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK')
-sysStz=seisLib.sysStations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK','seismic.stationsTST')
+# stz=seisLib.stations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK')
+sysStz=seisLib.sysStations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK','seismic.stations')
 def rawProcess(sysStz):
 
     client = seisLib.drumPlot('/mnt/ide/seed/')
@@ -25,7 +25,7 @@ def rawProcess(sysStz):
     client._alertTable='seismic.alerts'
     client._basePath = '/home/geoapp/'
     client._basePathRT = '/mnt/geoAppServer/'
-    client._stations=stz
+
     client._amplAn = {
         'lowFW': [1, 20],
         'highFW': [20, 50],
@@ -45,7 +45,7 @@ def postProcess(sysStz):
 
 
     al=seisLib.alert('seismic.alerts')
-    al._stations=stz
+
 
     al._th = {  # soglie su cui definire rate
         'AML': 0.00005,
@@ -71,12 +71,45 @@ def postProcess(sysStz):
 
     al._sysStations=sysStz
     #al.multiPr_HR_run(st)
-    al.HR_run(st)
+    al.HR_run(st,['AML','AMH','CL'])
 
 
-def t():
-    while 1<2:
-        time.sleep(10)
+def postProcessCASP(sysStz):
+
+    st=['LK_BRK0','LK_BRK1','LK_BRK2','LK_BRK3','LK_BRK4']
+    cl=[('LK_BRK0','LK_BRK2'),('LK_BRK1','LK_BRK2'),('LK_BRK1','LK_BRK4'),('LK_BRK3','LK_BRK4')]
+
+
+    al=seisLib.alert('seismic.alerts')
+
+    al._th = {  # soglie su cui definire rate
+        'AML': 0.00005,
+        'AMH': 0.00005,
+        'CASP':0
+    }
+    al._rTh = {  # soglie rate
+        'AML': 0,
+        'AMH': 0,
+        'CASP': 0,
+        'wnd': 1,
+        'sft': 3600
+    }
+    al._clTh={
+        'lag':3600
+    }
+
+    al._rateX=np.arange(0,60,1)
+    al._amplY=np.arange(3,-3,-0.1)
+
+    al._thMatrix=np.zeros([len(al._amplY),len(al._rateX)])
+
+    al._thMatrix[0:np.where(al._amplY>2.5)[0][-1],5:]=1
+    al._thMatrix[0:np.where(al._amplY>0.0008)[0][-1],20:]=2
+    al._thMatrix[0:np.where(al._amplY>0.002)[0][-1],40:]=3
+
+    al._sysStations=sysStz
+    #al.multiPr_HR_run(st)
+    al.HR_run(st,['CASP'])
 
 
 if __name__ == '__main__':
@@ -87,7 +120,9 @@ if __name__ == '__main__':
     pp = multiprocessing.Process(target=postProcess, name='PP', args=(sysStz,))
     pp.start()
 
-
+    pc = multiprocessing.Process(target=postProcessCASP, name='PC', args=(sysStz,))
+    pc.start()
 
     pr.join()
     pp.join()
+    pc.join()

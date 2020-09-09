@@ -2,7 +2,7 @@
 import time
 import multiprocessing
 
-from seisLib import drumPlot
+#from seisLib import drumPlot
 import seisLib
 import numpy as np
 
@@ -41,11 +41,13 @@ def postProcess(sysStz):
 
     al._th = {  # soglie su cui definire rate
         'AML': 0.00005,
-        'AMH': 0.00005
+        'AMH': 0.00005,
+        'CASP':0
     }
     al._rTh = {  # soglie rate
         'AML': 0,
         'AMH': 0,
+        'CASP': 0,
         'wnd': 1,
         'sft': 0.25
     }
@@ -54,7 +56,7 @@ def postProcess(sysStz):
     }
 
     al._rateX=np.arange(0,100,1)
-    al._amplY=np.arange(0.01,-0.0001,-0.0001)
+    al._amplY=np.arange(0.01,-3,-0.1)
     al._thMatrix=np.zeros([len(al._amplY),len(al._rateX)])
     al._thMatrix[0:np.where(al._amplY>0.0004)[0][-1],5:]=1
     al._thMatrix[0:np.where(al._amplY>0.0008)[0][-1],20:]=2
