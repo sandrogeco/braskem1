@@ -156,6 +156,7 @@ class sysStations():
     #         self.statusCalc(a, key)
 
     def statusCalc(self,a,key):
+        l=1
         if a._latency > a._maxLatency:
             a._status = 0
         else:
@@ -183,8 +184,6 @@ class sysStation():
     _HR=0
     _AM=0
     _MAG=0
-    _lastAlertType=''
-    _lastAlertTime=UTCDateTime
     _status=1
     _latency=0
     _name=''
@@ -204,6 +203,7 @@ class alert():
     # _stations=stations
     _sysStations=sysStations
     _confFile='pp.json'
+    _time=UTCDateTime
     _a={
         'id_alert':"''",
         'utc_time':'',
@@ -259,7 +259,7 @@ class alert():
         'lag':3600
     }
 
-    def __init__(self,table=''):
+    def __init__(self,table='seismic.alerts'):
         self.connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
                                       password='Bebedouro77627')
         self._table=table
@@ -270,21 +270,24 @@ class alert():
 
     def insert(self,s0=True,clause=''):
         try:
-            t=UTCDateTime.strptime(self._a['utc_time'],"'%Y-%m-%d %H:%M:%S'")
+            # t=UTCDateTime.strptime(self._a['utc_time'],"'%Y-%m-%d %H:%M:%S'")
+            t=self._time
             if s0:
                 self._a['utc_time']=t.strftime("'%Y-%m-%d %H:%M:00'")
                 self._a['utc_time_str']=t.strftime("'%Y-%m-%d %H:%M:00'")
             else:
-                self._a['utc_time'] = t.strftime("'%Y-%m-%d %H:%M:%S'")
-                self._a['utc_time_str'] = t.strftime("'%Y-%m-%d %H:%M:%S'")
+                self._a['utc_time'] = "'"+t.strftime("%Y-%m-%d %H:%M:%S.%f")[:-4]+"'"
+                self._a['utc_time_str'] = "'"+t.strftime("%Y-%m-%d %H:%M:%S.%f")[:-4]+"'"
             sql = "INSERT INTO " + self._table + " ("+"".join(str(s) + "," for s in self._a.keys())
             sql = sql[0:-1]
             sql += ") SELECT "+"".join( str(s) + "," for s in self._a.values())
             sql = sql[0:-1]
             sql += " WHERE NOT EXISTS( SELECT * FROM " + self._table + " WHERE utc_time=" + self._a['utc_time'] + \
                    " AND  station=" + self._a['station'] + " AND event_type=" + self._a['event_type'] + ");"
-            self.connection.cursor().execute(sql)
+            cur=self.connection.cursor()
+            cur.execute(sql)
             self.connection.commit()
+
         except:
             pass
 
@@ -331,11 +334,12 @@ class alert():
                 aa.append(a)
 
         if len(aa)>self._rTh[type]:
-            self._a['utc_time'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
-            self._a['utc_time_str'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
+            self._time=te
+            # self._a['utc_time'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
+            # self._a['utc_time_str'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
             self._a['event_type'] = "'HR_"+type+"'"
             self._a['rate'] = len(aa)/self._rTh['wnd']
-            ampl = np.mean(self._a['magnitudo'])
+            ampl = np.max(self._a['magnitudo'])
             fR = np.where(self._rateX >= self._a['rate'])[0]
             fA = np.where(self._amplY <= ampl)[0]
             fR = fR[0]
@@ -358,8 +362,9 @@ class alert():
                 aa.append(a)
         #print('al'+str(len(self._aList)))
         if len(aa)>self._rTh[type]:
-            self._a['utc_time'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
-            self._a['utc_time_str'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
+            self._time=te
+            # self._a['utc_time'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
+            # self._a['utc_time_str'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
             self._a['event_type'] = "'HR_"+type+"'"
             self._a['station'] = "'"+station+"'"
             self._a['amplitude_ehe'] =np.median([m['amplitude_ehe'] for m in aa])
@@ -388,6 +393,8 @@ class alert():
         except:
             te=UTCDateTime.now()
             pass
+
+
 
         while 1<2:
             if te<UTCDateTime.now():
@@ -437,8 +444,9 @@ class alert():
             if len(ll) == len(stGroup):
                 l=np.max(ll)
                 for st in stGroup:
-                    self._a['utc_time'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
-                    self._a['utc_time_str'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
+                    self._time=te
+                    # self._a['utc_time'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
+                    # self._a['utc_time_str'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
                     self._a['event_type'] = "'CL_" + evType + "'"
                     self._a['station'] = "'" + st + "'"
                     self._a['level'] = l
@@ -462,7 +470,14 @@ class drumPlot(Client):
         'lastDrum': UTCDateTime.now(),
     }
 
-
+    _rTh = {
+        'AML': 0,
+        'AMH': 0,
+        'CASP':0,
+        'wnd':1,
+        'sft':0.25
+    }
+    _lastElaborate=UTCDateTime
     _sysStations = sysStations
     _traces = Stream()
     _inv = read_inventory("metadata/Braskem_metadata.xml")
@@ -500,7 +515,48 @@ class drumPlot(Client):
 
     }
 
-    _polAnResult=[]
+
+    def rdLog(self):
+        pName=multiprocessing.current_process().name
+        try:
+            with open(pName+'.json', 'r') as fp:
+                p=json.load(fp)
+                self._lastElaborate=UTCDateTime.strptime(p['last'],"%Y-%m-%d %H:%M:%S")
+                fp.close()
+                te=self._lastElaborate
+        except:
+            te=UTCDateTime.now()
+            pass
+        return te
+
+    def wrLog(self):
+        pName = multiprocessing.current_process().name
+        with open(pName+'.json', 'w') as fp:
+            s={
+                'last':self._lastElaborate.strftime("%Y-%m-%d %H:%M:%S")
+            }
+            json.dump(s, fp)
+            fp.close()
+            print('saved')
+
+    def rtCASP(self):
+
+        te=self.rdLog()
+        while 1<2:
+            if te<UTCDateTime.now():
+                print('CASP ' + te.strftime("%Y-%m-%d %H:%M:%S"))
+                try:
+                    self.getCasp()
+                    # self.pushEv()
+                    #self._log['lastCASP'] = self._tEnd
+                    self._lastElaborate=self._tEnd
+                    self.wrLog()
+                except:
+                    print('CASP events forwarding failed')
+                    pass
+                te=te+self._rTh['sft']*3600
+            else:
+                time.sleep(10)
 
 
 
@@ -630,8 +686,9 @@ class drumPlot(Client):
                     envL =[obspy.signal.filter.envelope(st.data) for st in stTrace]
                     if np.max([np.max(e) for e in envL])>self._amplAn['lowFTh']:
                         a = alert(table)
-                        a._a['utc_time'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
-                        a._a['utc_time_str'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
+                        a._time = te
+                        # a._a['utc_time'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
+                        # a._a['utc_time_str'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
                         a._a['event_type'] = "'AML'"
                         a._a['station'] = "'" + nTr + "'"
                         a._a['amplitude_ehe'] = np.max(envL[0])
@@ -644,8 +701,9 @@ class drumPlot(Client):
                     envH = [obspy.signal.filter.envelope(st.data) for st in stTrace]
                     if np.max([np.max(e) for e in envH]) > self._amplAn['highFTh']:
                         a = alert(table)
-                        a._a['utc_time'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
-                        a._a['utc_time_str'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
+                        a._time = te
+                        # a._a['utc_time'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
+                        # a._a['utc_time_str'] = "'" + UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S") + "'"
                         a._a['event_type'] = "'AMH'"
                         a._a['station'] = "'" + nTr + "'"
                         a._a['amplitude_ehe'] = np.max(envH[0])
@@ -659,53 +717,23 @@ class drumPlot(Client):
 
         self._elRunning = False
 
-    def polAn(self,stTrace,ts,te,nTr,env,table):
-
-        u = obspy.signal.polarization.polarization_analysis(
-            stTrace, self._polAn['polWinLen'],
-            self._polAn['polWinFr'],
-            self._polAn['fLow'],
-            self._polAn['fHigh'],
-            ts, te, False, 'pm',self._polAn['plTh']**2)
-
-        x = np.where(u['azimuth_error'] > 0.01)#self._polAn['plTh'])
-        a = alert(table)
-
-        for xx in x[0]:
-            a._a['utc_time'] = "'" + UTCDateTime(u['timestamp'][xx]).strftime(
-                "%Y-%m-%d %H:%M:%S") + "'"
-            a._a['utc_time_str'] = "'" + UTCDateTime(u['timestamp'][xx]).strftime(
-                "%Y-%m-%d %H:%M:%S") + "'"
-            a._a['event_type'] = "'PL'"
-            a._a['station'] = "'" + nTr + "'"
-            #a._a['linearity'] = u['planarity'][xx]
-            a._a['az'] = u['azimuth'][xx]
-            a._a['tkoff'] = u['incidence'][xx]
-            y = np.where(
-                (u['timestamp'][xx] - self._polAn['polWinLen'] < stTrace[0].times('timestamp')) &
-                (stTrace[0].times('timestamp') <= u['timestamp'][xx]))
-            a._a['amplitude_ehe'] = np.max(env[0][y])
-            a._a['amplitude_ehn'] = np.max(env[1][y])
-            a._a['amplitude_ehz'] = np.max(env[2][y])
-            # print(a._a)
-
-            a.insert()
 
 
 
     def run(self, network, station, channel):
         logging.basicConfig(filename='log.log', level='WARNING',format='%(asctime)s %(message)s')
-        tStart = UTCDateTime()
-        try:
-            with open('lastRaw.json', 'r') as fp:
-                p=json.load(fp)
-                self._log={k: UTCDateTime.strptime(p[k],"%Y-%m-%d %H:%M:%S") for k in p}
-                fp.close()
-                tStart = self._log['lastRcv']
-        except:
-            tStart=UTCDateTime.now()
-            pass
+        # tStart = UTCDateTime()
+        # try:
+        #     with open('lastRaw.json', 'r') as fp:
+        #         p=json.load(fp)
+        #         self._log={k: UTCDateTime.strptime(p[k],"%Y-%m-%d %H:%M:%S") for k in p}
+        #         fp.close()
+        #         tStart = self._log['lastRcv']
+        # except:
+        #     tStart=UTCDateTime.now()
+        #     pass
 
+        tStart=self.rdLog()
 
         self._stationData={
             'BRK0': self._inv.get_coordinates('LK.BRK0..EHZ'),
@@ -720,6 +748,7 @@ class drumPlot(Client):
             fp.close()
 
         self._tNow=tStart
+        a=alert(self._alertTable)
         while 1 < 2:
 
             if self._tNow>UTCDateTime.now()-5:
@@ -756,17 +785,8 @@ class drumPlot(Client):
                     self.An(self._alertTable)
 
                 if (self._tNow.minute % self._rtSft == 0) & (self._lastData.minute % self._rtSft != 0):
-                    print('getting events')
-                    try:
-                        self.getCasp()
-                        self.pushEv()
-                        self._log['lastCASP']=self._tEnd
-
-                    except:
-                        print('CASP events forwarding failed')
-                        pass
-
-
+                    a.getAlerts(self._tEnd-3600*24,self._tEnd,'*','CASP')
+                    self._events=[dict(time=UTCDateTime(aa['utc_time']), text='CASP ev. mag' + str(aa['magnitudo'])) for aa in a._aList]
                     if (not self._rtRunning) & rt:
                         pRt = multiprocessing.Process(target=self.realTimeDrumPlot)
                         pRt.start()
@@ -776,14 +796,16 @@ class drumPlot(Client):
                         pHy = multiprocessing.Process(target=self.hystDrumPlot)
                         pHy.start()
 
-
-                with open('lastRaw.json', 'w') as fp:
-                    s = {k: self._log[k].strftime("%Y-%m-%d %H:%M:%S") for k in self._log}
-                    json.dump(s, fp)
-                    fp.close()
-                    print('saved')
+                self._lastElaborate=self._tEnd
+                self.wrLog()
+                # with open('lastRaw.json', 'w') as fp:
+                #     s = {k: self._log[k].strftime("%Y-%m-%d %H:%M:%S") for k in self._log}
+                #     json.dump(s, fp)
+                #     fp.close()
+                #     print('saved')
 
             self._lastData = self._tNow
+
 
     def getCasp(self):
         connection = psycopg2.connect(host='172.16.8.10', port='5432', database='casp_events', user='sismoweb',
@@ -792,68 +814,66 @@ class drumPlot(Client):
         cursor = connection.cursor()
         cursor.execute(sql)
         p=cursor.fetchall()
-        self._events=[]
+        a = alert()
+
         for pp in p:
-            e={
-                'id':pp[0],
-                'time':UTCDateTime(pp[1]),
-                'text':'CASP ev. mag'+str(pp[5]),
-                'lat':np.float(pp[2]),
-                'lon':np.float(pp[3]),
-                'dpt':np.float(pp[4]),
-                'mag':np.float(pp[5]),
-                'rel':pp[6],
-                'erh':np.float(pp[7]),
-                'erz':np.float(pp[8])
-            }
-            self._events.append(e)
-
-    def pushEv(self):
-        connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
-                                      password='Bebedouro77627')
-        for e in self._events:
-
-            sql = 'INSERT INTO seismic.events_casp (geom,lat,lon,utc_time,utc_time_str,magnitudo,depth,id_casp,rel) ' \
-                  "VALUES (ST_GeomFromText('POINT(" + str(e['lon']) + ' ' + str(e['lat']) + ")', 4326),"\
-                  + str(e['lat']) + ','+ str(e['lon'])+ ",'"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+ "','"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+"',"+str(e['mag'])+','+ str(e['dpt'])  +','+e['id']+","+str(e['rel'])+") ON CONFLICT DO NOTHING;"
-            connection.cursor().execute(sql)
-            connection.commit()
-            connection.close()
-            #
-
-            a = alert()
-            a._a['utc_time'] = "'" + UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S") + "'"
-            a._a['utc_time_str'] = "'" + UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S") + "'"
+            a._time =UTCDateTime(pp[1])
             a._a['event_type'] = "'CASP'"
             a._a['station'] = "'*'"
-            a._a['lat'] =e['lat']
-            a._a['lon'] = e['lon']
-            a._a['magnitudo'] = e['mag']
-            a._a['depth'] = e['dpt']
-            a._a['id_casp'] = e['id']
-            a._a['rel'] = e['rel']
-            a._a['erh'] = e['erh']
-            a._a['erz'] = e['erz']
+            a._a['lat'] =np.float(pp[2])
+            a._a['lon'] = np.float(pp[3])
+            a._a['magnitudo'] = np.float(pp[5])
+            a._a['depth'] = np.float(pp[4])
+            a._a['id_casp'] = pp[0]
+            a._a['rel'] = pp[6]
+            a._a['erh'] = pp[7]
+            a._a['erz'] = pp[8]
             a.insert(False)
+        connection.close()
             #
-            # sql='INSERT INTO seismic.alerts (station,lat,lon,utc_time,utc_time_str,magnitudo,depth,id_casp,rel,event_type)'\
-            #    " SELECT '*',"+ str(e['lat']) + ','+ str(e['lon'])+ ",'"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+ "','"+  str(UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S"))+"',"+str(e['mag'])+','+ str(e['dpt'])  +','+e['id']+","+str(e['rel'])+\
-            #    ",'CASP' WHERE NOT EXISTS( SELECT * FROM seismic.alerts  WHERE id_casp="+e['id'] + ");"
-            # connection.cursor().execute(sql)
-            # connection.commit()
-
-
-
-    def pushIntEv(self,e,table='seismic.events_swarm',id='id_swarm'):
-        connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
-                                      password='Bebedouro77627')
-        #for e in events:
-
-        sql = 'INSERT INTO '+table+ ' (geom,note,lat,lon,utc_time,utc_time_str,magnitudo,depth,'+id+') ' \
-              "VALUES (ST_GeomFromText('POINT(" + str(e['lon']) + ' ' + str(e['lat']) + ")', 4326)" \
-              + ",'" + e['note'] + "'," + str(e['lat']) + ',' + str(e['lon']) + ",'" + str(
-            UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S")) + "','" + str(
-            UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S")) + "'," + str(e['mag']) + ',' + str(e['dpt']) + ",'" + \
-              e['id'] + "') ON CONFLICT DO NOTHING;"
-        connection.cursor().execute(sql)
-        connection.commit()
+            # e={
+            #     'id':pp[0],
+            #     'time':UTCDateTime(pp[1]),
+            #     'text':'CASP ev. mag'+str(pp[5]),
+            #     'lat':np.float(pp[2]),
+            #     'lon':np.float(pp[3]),
+            #     'dpt':np.float(pp[4]),
+            #     'mag':np.float(pp[5]),
+            #     'rel':pp[6],
+            #     'erh':np.float(pp[7]),
+            #     'erz':np.float(pp[8])
+            # }
+            # self._events.append(e)
+    #
+    # def pushEv(self):
+    #
+    #     for e in self._events:
+    #
+    #         a = alert()
+    #         a._time = e['time']
+    #         a._a['event_type'] = "'CASP'"
+    #         a._a['station'] = "'*'"
+    #         a._a['lat'] =e['lat']
+    #         a._a['lon'] = e['lon']
+    #         a._a['magnitudo'] = e['mag']
+    #         a._a['depth'] = e['dpt']
+    #         a._a['id_casp'] = e['id']
+    #         a._a['rel'] = e['rel']
+    #         a._a['erh'] = e['erh']
+    #         a._a['erz'] = e['erz']
+    #         a.insert(False)
+    #
+    #
+    # def pushIntEv(self,e,table='seismic.events_swarm',id='id_swarm'):
+    #     connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
+    #                                   password='Bebedouro77627')
+    #     #for e in events:
+    #
+    #     sql = 'INSERT INTO '+table+ ' (geom,note,lat,lon,utc_time,utc_time_str,magnitudo,depth,'+id+') ' \
+    #           "VALUES (ST_GeomFromText('POINT(" + str(e['lon']) + ' ' + str(e['lat']) + ")', 4326)" \
+    #           + ",'" + e['note'] + "'," + str(e['lat']) + ',' + str(e['lon']) + ",'" + str(
+    #         UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S")) + "','" + str(
+    #         UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S")) + "'," + str(e['mag']) + ',' + str(e['dpt']) + ",'" + \
+    #           e['id'] + "') ON CONFLICT DO NOTHING;"
+    #     connection.cursor().execute(sql)
+    #     connection.commit()

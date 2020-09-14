@@ -8,7 +8,7 @@ import numpy as np
 
 from obspy import  UTCDateTime
 
-stz=seisLib.stations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK')
+
 sysStz=seisLib.sysStations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK','seismic.stations')
 def rawProcess(sysStz):
 
@@ -17,7 +17,7 @@ def rawProcess(sysStz):
     client._alertTable='seismic.alerts'
     client._basePath = '/home/geoapp/'
     client._basePathRT = '/mnt/geoAppServer/'
-    client._stations=stz
+
     client._amplAn = {
         'lowFW': [1, 20],
         'highFW': [20, 50],
@@ -37,7 +37,6 @@ def postProcess(sysStz):
 
 
     al=seisLib.alert('seismic.alerts')
-    al._stations=stz
 
     al._th = {  # soglie su cui definire rate
         'AML': 0.00005,
@@ -79,9 +78,9 @@ if __name__ == '__main__':
     # pr.start()
 
     pp = multiprocessing.Process(target=postProcess, name='PP', args=(sysStz,))
-    pp.start()
-
-
+    # pp.start()
+    al=seisLib.alert('seismic.alerts')
+    a = al.getAlerts(UTCDateTime.now()-3600*24, UTCDateTime.now(), '*', 'CASP')
 
     # pr.join()
     pp.join()

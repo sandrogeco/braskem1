@@ -37,6 +37,19 @@ def rawProcess(sysStz):
     #client.multiPr_run('LK', 'BRK?', 'E??' )
     client.run('LK', 'BRK?', 'E??')
 
+def rawProcessCASP(sysStz):
+
+    client = seisLib.drumPlot('/mnt/ide/seed/')
+    client._alertTable='seismic.alerts'
+    client._sysStations=sysStz
+    client._rTh = {
+        'AML': 0,
+        'AMH': 0,
+        'wnd': 1,
+        'sft': 2/60
+    }
+    client.rtCASP()
+
 
 def postProcess(sysStz):
 
@@ -92,7 +105,7 @@ def postProcessCASP(sysStz):
         'AMH': 0,
         'CASP': 0,
         'wnd': 1,
-        'sft': 3600
+        'sft': 0.25
     }
     al._clTh={
         'lag':3600
@@ -117,6 +130,10 @@ if __name__ == '__main__':
     pr = multiprocessing.Process(target=rawProcess, name='RAW', args=(sysStz,))
     pr.start()
 
+    prCASP = multiprocessing.Process(target=rawProcessCASP, name='RAWCASP', args=(sysStz,))
+    prCASP.start()
+
+
     pp = multiprocessing.Process(target=postProcess, name='PP', args=(sysStz,))
     pp.start()
 
@@ -124,5 +141,6 @@ if __name__ == '__main__':
     pc.start()
 
     pr.join()
+    prCASP.join()
     pp.join()
     pc.join()
