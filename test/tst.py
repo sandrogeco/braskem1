@@ -9,7 +9,10 @@ import numpy as np
 from obspy import  UTCDateTime
 
 
-sysStz=seisLib.sysStations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK','seismic.stations')
+sysStz=seisLib.sysStations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK','seismic.stationsTST')
+
+
+
 def rawProcess(sysStz):
 
     client = seisLib.drumPlot('/mnt/ide/seed/')
@@ -26,8 +29,14 @@ def rawProcess(sysStz):
 
     }
     client._sysStations=sysStz
-    #client.multiPr_run('LK', 'BRK?', 'E??' )
-    client.run('LK', 'BRK?', 'E??')
+    while 1<2:
+        time.sleep(20)
+        e=seisLib.eventAlert()
+        e._type='pippo'
+        client._sysStations.updateLatency(['LK_BRK0'],UTCDateTime.now().second)
+        client._sysStations.insertAlert(UTCDateTime.now(),'LK_BRK0','XXX',2,60,'eee'+str(UTCDateTime.now().second))
+    #al.multiPr_HR_run(st)
+    #al.HR_run(st,['CASP'])
 
 
 def postProcess(sysStz):
@@ -63,24 +72,34 @@ def postProcess(sysStz):
     al._clusters=cl
 
     al._sysStations=sysStz
+    print (hex(id(al._sysStations)))
+    while 1<2:
+        time.sleep(10)
+        e=seisLib.eventAlert()
+        e._type='pippo'
+        al._sysStations.updateLatency(['LK_BRK1'],UTCDateTime.now().second)
+        al._sysStations.insertAlert(UTCDateTime.now(),'LK_BRK1','PPPP',1,30,'eee'+str(UTCDateTime.now().second))
     #al.multiPr_HR_run(st)
-    al.HR_run(st,['CASP'])
+    #al.HR_run(st,['CASP'])
 
 
 def t():
     while 1<2:
         time.sleep(10)
 
+def t1():
+    while 1<2:
+        time.sleep(10)
 
 if __name__ == '__main__':
     #
-    # pr = multiprocessing.Process(target=rawProcess, name='RAW', args=(sysStz,))
-    # pr.start()
+    pr = multiprocessing.Process(target=rawProcess, name='RAW', args=(sysStz,))
+    pr.start()
 
     pp = multiprocessing.Process(target=postProcess, name='PP', args=(sysStz,))
-    # pp.start()
-    al=seisLib.alert('seismic.alerts')
-    a = al.getAlerts(UTCDateTime.now()-3600*24, UTCDateTime.now(), '*', 'CASP')
+    pp.start()
+    print(hex(id(sysStz)))
+    sysStz.run()
 
-    # pr.join()
+    pr.join()
     pp.join()
