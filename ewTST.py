@@ -17,12 +17,12 @@ import numpy as np
 from obspy import  UTCDateTime
 
 # stz=seisLib.stations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK')
-sysStz=seisLib.sysStations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK','seismic.stations')
+sysStz=seisLib.sysStations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK','seismic.stationsTST')
 def rawProcess(sysStz):
 
     client = seisLib.drumPlot('/mnt/ide/seed/')
 
-    client._alertTable='seismic.alerts'
+    client._alertTable='seismic.alertsTST'
     client._basePath = '/home/geoapp/'
     client._basePathRT = '/mnt/geoAppServer/'
 
@@ -40,7 +40,7 @@ def rawProcess(sysStz):
 def rawProcessCASP(sysStz):
 
     client = seisLib.drumPlot('/mnt/ide/seed/')
-    client._alertTable='seismic.alerts'
+    client._alertTable='seismic.alertsTST'
     client._sysStations=sysStz
     client._rTh = {
         'AML': 0,
@@ -49,7 +49,7 @@ def rawProcessCASP(sysStz):
         'wnd': 5/60,
         'sft': 2/60
     }
-    client.rtCASP()
+    client.rtCASP(False)
 
 
 def postProcess(sysStz):
@@ -58,7 +58,7 @@ def postProcess(sysStz):
     cl=[('LK_BRK0','LK_BRK2'),('LK_BRK1','LK_BRK2'),('LK_BRK1','LK_BRK4'),('LK_BRK3','LK_BRK4')]
 
 
-    al=seisLib.alert('seismic.alerts')
+    al=seisLib.alert('seismic.alertsTST')
 
 
     al._th = {  # soglie su cui definire rate
@@ -92,7 +92,7 @@ def postProcessCASP(sysStz):
 
     st=['LK_BRK0','LK_BRK1','LK_BRK2','LK_BRK3','LK_BRK4']
 
-    al=seisLib.alert('seismic.alerts')
+    al=seisLib.alert('seismic.alertsTST')
 
     al._th = {  # soglie su cui definire rate
         'AML': 0.00005,
@@ -122,14 +122,14 @@ def postProcessCASP(sysStz):
 if __name__ == '__main__':
 
     pr = multiprocessing.Process(target=rawProcess, name='RAW', args=(sysStz,))
-    pr.start()
+    # pr.start()
 
     prCASP = multiprocessing.Process(target=rawProcessCASP, name='RAWCASP', args=(sysStz,))
     prCASP.start()
 
 
     pp = multiprocessing.Process(target=postProcess, name='PP', args=(sysStz,))
-    pp.start()
+    # pp.start()
 
     pc = multiprocessing.Process(target=postProcessCASP, name='PC', args=(sysStz,))
     pc.start()
