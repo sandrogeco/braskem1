@@ -1,3 +1,4 @@
+import time
 from seisLib import drumPlot
 import utm
 import numpy as np
@@ -19,56 +20,24 @@ sft=10
 
 st=['BRK0','BRK1','BRK2','BRK3','BRK4']
 ns=len(st)
-ns2=np.int((ns*ns-ns)/2)
-rms=np.zeros(ns)
-vpp=np.zeros(ns,object)
-vppOffset=np.zeros(ns)
-vppOffsetShort=np.zeros(ns)
-vCh=np.zeros(ns)
 
-
-r=np.zeros((ns,ns))
-rs=np.zeros((ns,ns))
 data=np.load('dst.npz')
 dst=data['dst']
 dsts=data['dsts']
 grid=data['grid']
-result=np.zeros(dst.shape)
-results=np.zeros(dst.shape)
-resultGroup=np.zeros([2,ns+1],dtype=object)
-
-tt=t
-lLat=[]
-lLon=[]
-ld=[]
-lRmean=[]
-lRmax=[]
-lResult=[]
-
-
-rmsOffset=0
-print('base rms calculated')
-
-def trAmpl(tr):
-    r=np.sqrt(tr[0].data**2+tr[1].data**2+tr[2].data**2)
-    return r
 
 def loc(dstM,r,dec,e,lx,ly,lz):
     dst=np.zeros(dstM.shape,object)
     dst[:,:,:]=dstM[:,:,:]
     result = np.ones(dst.shape)*np.Inf
-    #dst = dst[lx[0]:lx[1], ly[0]:ly[1], lz[0]:lz[1]]
     for i in np.arange(lx[0], lx[1], dec):
         for j in np.arange(ly[0], ly[1], dec):
             for k in np.arange(lz[0], lz[1], dec):
                 p = r - dst[i, j, k]
                 p[e, :] = 0
                 p[:, e] = 0
-                # mx = np.unravel_index(np.argmax(abs(p)), p.shape)
-                # p[mx]=0
-                #p=p*dst[i, j, k]
                 pp=p[0,:]
-                result[i, j, k] = np.sqrt(np.dot(pp,pp))/(ns2-len(e))#np.sqrt(np.trace(np.dot(p.T, p)))/(ns2)
+                result[i, j, k] = np.sqrt(np.dot(pp,pp))/(ns*ns/2-ns-len(e))
 
     mm = np.unravel_index(np.argmin (result), result.shape)
     m = np.min(result)
@@ -87,57 +56,24 @@ def loc(dstM,r,dec,e,lx,ly,lz):
         lx=[np.int(np.maximum(mm[0]-sx,0)),np.int(np.minimum(mm[0]+sx,dst.shape[0]))]
         ly = [np.int(np.maximum(mm[1] -sy, 0)), np.int(np.minimum(mm[1] +sy, dst.shape[1]))]
         lz = [np.int(np.maximum(mm[2] - sz, 0)), np.int(np.minimum(mm[2] + sz, dst.shape[2]))]
-
-
         dec=np.int(dec/2)
         return loc(dst,r,dec,e,lx,ly,lz)
 
-def locDsp(dstM,r,dec,e,lx,ly,lz):
-    dst=np.zeros(dstM.shape,object)
-    dst[:,:,:]=dstM[:,:,:]
-    result = np.ones(dst.shape)*np.Inf
-    #dst = dst[lx[0]:lx[1], ly[0]:ly[1], lz[0]:lz[1]]
-    for k in np.arange(lz[0], lz[1], dec):
-        m=np.Inf
-        for i in np.arange(lx[0], lx[1], dec):
-            for j in np.arange(ly[0], ly[1], dec):
+def HR_run(self,st):
 
-                p = r - dst[i, j, k]
-                p[e, :] = 0
-                p[:, e] = 0
-                # mx = np.unravel_index(np.argmax(abs(p)), p.shape)
-                # p[mx]=0
-                #p=p*dst[i, j, k]
-                rr = np.sqrt(np.trace(np.dot(p.T, p)))/(ns2)
-                result[i, j, k]=rr
-                if rr <m:
-                    m=rr
-        # print(m)
-        # print(k)
-        plt.imshow(result[:,:,k].T)
-        plt.pause(2)
-    mm = np.unravel_index(np.argmin (result), result.shape)
-    m = np.min(result)
+        # l=log()
+        # te=l.rdLog()
+    te=UTCDateTime()
+    while 1<2:
+        if te<UTCDateTime.now():
+            # l.wrLog(te)
+            te=te+sft*3600
 
-    if dec==1:
-
-        rr={
-            'min':m,
-            'mPos':mm
-
-        }
-        return rr
-    else:
-        sx=(lx[1]-lx[0])/4
-        sy= (ly[1] - ly[0])/4
-        sz = (lz[1] - lz[0])/4
-        lx=[np.int(np.maximum(mm[0]-sx,0)),np.int(np.minimum(mm[0]+sx,dst.shape[0]))]
-        ly = [np.int(np.maximum(mm[1] -sy, 0)), np.int(np.minimum(mm[1] +sy, dst.shape[1]))]
-        lz = [np.int(np.maximum(mm[2] - sz, 0)), np.int(np.minimum(mm[2] + sz, dst.shape[2]))]
+        else:
+            time.sleep(10)
 
 
-        dec=np.int(dec/2)
-        return loc(dst,r,dec,e,lx,ly,lz)
+
 
 
 lta=10

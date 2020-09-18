@@ -62,14 +62,14 @@ class log():
             fp.close()
             print('saved')
 
-
 class sysStations():
     _refresh=5
 
 
     def __init__(self,sts,net,table='seismic.stations',refresh=5):
         self._stations=multiprocessing.Manager().dict()
-        self._alarms=multiprocessing.Manager().dict()#list()
+        self._alarms=multiprocessing.Manager().dict()
+        self._raw=multiprocessing.Manager().list()
         self._refresh=refresh
         for s in sts:
             self._stations[net+"_"+s]=sysStation(s,net)
@@ -110,12 +110,6 @@ class sysStations():
                 pass
 
             t=UTCDateTime.now()
-            # a=[]
-            # a[:]=self._alarms[:]
-            # try:
-            #     self._alarms[:]=[e for e in a if (e._time + e._tOff > UTCDateTime.now())]
-            # except:
-            #     pass
             a=self._alarms.copy()
             try:
                 [self._alarms.pop(e) for e in a.keys() if (a[e]._time + a[e]._tOff < UTCDateTime.now())]
@@ -230,9 +224,6 @@ class eventAlert():
         self._station=station
         self._time=time
 
-
-
-
 class sysStation():
 
 
@@ -253,8 +244,6 @@ class sysStation():
         self._name=name
         self._network=net
         self._intName=self._network+"_"+self._name
-
-
 
 class alert():
     _sysStations=sysStations
@@ -773,6 +762,8 @@ class drumPlot(Client):
                 self._2minRTraces.remove_response(self._inv)
                 self._2minRTraces.sort()
 
+                # self._sysStations._raw=self._2minRTraces.copy()
+
                 if (not self._elRunning):
                     self.An(self._alertTable)
 
@@ -793,12 +784,16 @@ class drumPlot(Client):
 
 
     def getCasp(self):
-        connection = psycopg2.connect(host='172.16.8.10', port='5432', database='casp_events', user='sismoweb',
-                                      password='lun1t3k@@',connect_timeout=10)
-        sql = 'SELECT event_id, t0, lat, lon, dpt, magWA,reliable,erh,erz FROM auto_eventi ORDER BY event_id DESC LIMIT 10'
-        cursor = connection.cursor()
-        cursor.execute(sql)
-        p=cursor.fetchall()
+        try:
+            connection = psycopg2.connect(host='172.16.8.10', port='5432', database='casp_events', user='sismoweb',
+                                          password='lun1t3k@@',connect_timeout=10)
+            sql = 'SELECT event_id, t0, lat, lon, dpt, magWA,reliable,erh,erz FROM auto_eventi ORDER BY event_id DESC LIMIT 10'
+            cursor = connection.cursor()
+            cursor.execute(sql)
+            p = cursor.fetchall()
+        except:
+            print('get CASP failed')
+            pass
         a = alert()
 
         for pp in p:
@@ -823,3 +818,19 @@ class drumPlot(Client):
             if aa['magnitudo'] > self._rTh['CASP']:  # self._rTh['sft']
                 self._sysStations.insertAlert(aa['utc_time'], aa['station'], "'"+aa['event_type']+"'", 2,
                                               2 * self._rTh['sft'] * 3600, 'High magnitudo CASP event')
+
+
+
+    def pushIntEv(self,e,table='seismic.events_swarm',id='id_swarm'):
+        connection = psycopg2.connect(host='80.211.98.179', port='5432', user='maceio',
+                                      password='Bebedouro77627')
+        #for e in events:
+
+        sql = 'INSERT INTO '+table+ ' (geom,note,lat,lon,utc_time,utc_time_str,magnitudo,depth,'+id+') ' \
+              "VALUES (ST_GeomFromText('POINT(" + str(e['lon']) + ' ' + str(e['lat']) + ")', 4326)" \
+              + ",'" + e['note'] + "'," + str(e['lat']) + ',' + str(e['lon']) + ",'" + str(
+            UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S")) + "','" + str(
+            UTCDateTime(e['time']).strftime("%Y-%m-%d %H:%M:%S")) + "'," + str(e['mag']) + ',' + str(e['dpt']) + ",'" + \
+              e['id'] + "') ON CONFLICT DO NOTHING;"
+        connection.cursor().execute(sql)
+        connection.commit()
