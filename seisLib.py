@@ -38,8 +38,9 @@ class log():
 
     _lastElaborate=UTCDateTime
 
-    def rdLog(self):
-        pName=multiprocessing.current_process().name
+    def rdLog(self,pName=''):
+        if pName=='':
+            pName = multiprocessing.current_process().name
         try:
             with open(pName+'.json', 'r') as fp:
                 p=json.load(fp)
@@ -798,7 +799,7 @@ class drumPlot(Client):
 
         channel="EH?"
 
-        while 1 < 2:
+        while True:
 
             if self._tNow>UTCDateTime.now()-5:
                 time.sleep(5)
@@ -806,12 +807,11 @@ class drumPlot(Client):
             else:
                 self._tNow += 10
 
-            print(self._tNow)
 
             if self._tNow.second < self._lastData.second:
                 self._tEnd = self._tNow
 
-                print('getting traces')
+                print('getting traces'+ UTCDateTime(self._tEnd).strftime("%Y-%m-%d %H:%M:%S"))
                 for s in station:
                     try:
                         self._traces+=self.get_waveforms(network, s, '', channel, self._tEnd - tBufLong,

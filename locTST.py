@@ -1,5 +1,6 @@
 import time
 from seisLib import drumPlot
+from seisLib import log
 import utm
 import numpy as np
 from obspy import UTCDateTime
@@ -11,6 +12,7 @@ from scipy.optimize import curve_fit
 #import simplekml
 import obspy.signal
 import obspy.signal.cross_correlation
+import obspy.signal.filter
 import seisLib
 import multiprocessing
 plt.switch_backend('tKagg')
@@ -18,27 +20,23 @@ plt.switch_backend('tKagg')
 
 
 
-#
-#
-# st=['BRK0','BRK1','BRK2','BRK3','BRK4']
-# ns=len(st)
-# data=np.load('metadata/dst.npz')
-# dst=data['dst']
-# dsts=data['dsts']
-# grid=data['grid']
+
+
 
 def loc(dstM,r,dec,e,lx,ly,lz):
     dst=np.zeros(dstM.shape,object)
     dst[:,:,:]=dstM[:,:,:]
     result = np.ones(dst.shape)*np.Inf
+    le=np.sum(e)
     for i in np.arange(lx[0], lx[1], dec):
         for j in np.arange(ly[0], ly[1], dec):
             for k in np.arange(lz[0], lz[1], dec):
                 p = r - dst[i, j, k]
-                p[e, :] = 0
-                p[:, e] = 0
-                pp=p[0,:]
-                result[i, j, k] = np.sqrt(np.dot(pp,pp))/(ns*ns/2-ns-len(e))
+                # p[e, :] = 0
+                # p[:, e] = 0
+                p=p*e
+                # pp=p[0,:]
+                result[i, j, k] = np.sqrt(np.trace(np.dot(p,p.T)))/le
 
     mm = np.unravel_index(np.argmin (result), result.shape)
     m = np.min(result)
@@ -61,35 +59,94 @@ def loc(dstM,r,dec,e,lx,ly,lz):
         return loc(dst,r,dec,e,lx,ly,lz)
 
 
+def locOnGrid(a,tt):
+        # aVol = loc(dst, r, 8, e, [0, dst.shape[0]], [0, dst.shape[1]], [0, dst.shape[2]])
+        client = drumPlot('/mnt/ide/seed/')
+        mm = a['mPos']
+        m = a['min']
+        x = grid[0, mm[0], mm[1], mm[2]]
+        y = grid[1, mm[0], mm[1], mm[2]]
+        z = grid[2, mm[0], mm[1], mm[2]]
+        lat, lon = utm.to_latlon(x, y, 25, 'L')
+        ttt=UTCDateTime(tt)
+
+        ev = {
+            'id': UTCDateTime(ttt).strftime("%m%d%H%M%S"),
+            'time': UTCDateTime(ttt),
+
+            'lat': lat,
+            'lon': lon,
+            'dpt': z/1000,
+            'mag':1,
+            'note':'error '+str(m)
+        }
+        client.pushIntEv(ev)
+
+def SARALoc(r,e,t):
+    if np.sum(e)>1:
+        a=loc(dst, r, 8, e, [0, dst.shape[0]], [0, dst.shape[1]], [0, dst.shape[2]])
+        locOnGrid(a,t)
+
 
 def run(st):
     wnd=10
-    sft=5
-        # l=log()
-    #te=l.rdLog()
-    te=UTCDateTime(2020,8,1,16,30)
+    sft=2
+    l = log()
+    te= l.rdLog('RUNACQ')
     tre={}
-    while True:
-        if te<UTCDateTime.now():
-            try:
-                tr=sysStz._raw[0].copy()
-                tr.filter('bandpass', freqmin=4, freqmax=12, corners=3, zerophase=True)
-                tr.trim(te-wnd,te)
-                for s in range(0,len(st)):
-                    trs=tr.select('LK',st[s],'','EHZ')
-                    tre[s]=obspy.signal.filter.envelope(trs[0].data)
+    ttr={}
+    safetyTime=30
+    cc = np.zeros([len(sysStz._stations), len(sysStz._stations)])
+    ee=np.zeros([len(sysStz._stations), len(sysStz._stations)])
+    rr= np.zeros([len(sysStz._stations), len(sysStz._stations)])
 
-                cc=[]
-                for s in range(0,len(st)):
-                    for s1 in range(s,len(st)):
-                        c=obspy.signal.cross_correlation.correlate(tre[s],tre[s1],len(tre[s]))
-                        cc[s, s1] =np.max(c)
-                print('pp')
-            except:
-                pass
+    while True:
+        try:
+            tr = sysStz._raw[0].copy()
+            safeZoneL=np.max([tt.stats['starttime'] for tt in tr])+safetyTime
+            safeZoneH=np.min([tt.stats['endtime'] for tt in tr]) - safetyTime
+        except:
+            time.sleep(1)
+            continue
+
+        if te < safeZoneL:
+            te=safeZoneL
+        if safeZoneH> te:
+            sList =[sysStz._stations[s]._name for s  in sysStz._stations]
+            tprv=tr.copy()
+            tprv.filter('bandpass', freqmin=3, freqmax=10, corners=3, zerophase=True)
+            print('XXXX')
+            print(te)
+            print(np.min([tt.stats['endtime'] for tt in tr]))
+            print('****')
+            for sName in sList:
+                a=tr.select('*',sName,'','EHZ')[0].copy()
+                b = tr.select('*', sName, '', 'EHZ')[0].copy()
+                ttr[sName]=a
+                ttr[sName].data= obspy.signal.filter.envelope(b.data)
+                ttr[sName].filter('bandpass', freqmin=1, freqmax=10, corners=3, zerophase=True)
+                # ttr[sName].trim(te-wnd,te)
+
+            for s in range(0,len(sName)):
+                for s1 in range(s+1,len(sName)):
+                    ss=sList[s]
+                    ss1=sList[s1]
+                    c=obspy.signal.cross_correlation.correlate(ttr[ss],ttr[ss1],2*len(ttr[ss]))
+                    cc[s, s1] =np.max(c)
+                    ee[s,s1]=cc[s,s1]
+                    rr[s,s1]=np.max(ttr[ss1].data)/np.max(ttr[ss].data)
+
+            m=np.max(cc)
+            print(m)
+            if(m>0.75):
+                ee[ee<0.75]=0
+                ee[ee>=0.75]=1
+
+                SARALoc(rr,ee,te)
             te=te+sft;
         else:
             time.sleep(1)
+
 
 
 sysStz = seisLib.sysStations(['BRK0', 'BRK1', 'BRK2', 'BRK3', 'BRK4'], 'LK', 'seismic.stationsTST')
@@ -103,126 +160,16 @@ def clientAcq(sysStz):
 pp = multiprocessing.Process(target=clientAcq, name='RUNACQ',args=(sysStz,))
 pp.start()
 
+
+data=np.load('metadata/dst.npz',allow_pickle=True)
+dst=data['dst']
+dsts=data['dsts']
+grid=data['grid']
 run(['BRK0', 'BRK1', 'BRK2', 'BRK3', 'BRK4'])
-s=1
-# while s<2:
-#     print('xx')
-#     time.sleep(15)
-#     print(sysStz._raw[0])
+
 
 pp.join()
-#
-#
-#
-#
-# lta=10
-# sta=1
-# sl=1.2
-# ttL=tt
-# readLta=True
-# traces=np.zeros(ns,object)
-# trf=np.zeros(ns,object)
-# tr=np.zeros(ns,object)
-# th=0.00001
-#
-# #
-# # pp=['BRK0','BRK1','BRK2','BRK3','BRK4']
-# # p=client.get_waveforms('LK', 'BRK0', '', 'EH?', UTCDateTime(2020,7,30,20,0,0),UTCDateTime(2020,7,30,20,10,0))
-# # p.remove_response(client._inv)
-# # tr=p.copy()
-# # tr.filter('bandpass', freqmin=4, freqmax=12, corners=3, zerophase=True)
-# # u = obspy.signal.polarization.polarization_analysis(tr, 5, .1, 4, 12,
-# #                                                     tr[0].stats['starttime'], tr[0].stats['endtime'], False,
-# #                                                     'pm')
-# # plt.figure()
-# # plt.plot(tr[0].times('timestamp'),tr[0].data*100000)
-# # plt.plot(u['timestamp'],u['azimuth'],'o',markersize=1)
-# # plt.plot(u['timestamp'],u['azimuth_error']*500,'o',markersize=1)
-# # plt.plot(u['timestamp'],u['incidence_error']*500,'o',markersize=1)
-# while 1<2:
-#     # print('sta from ' + UTCDateTime(tt - sta * wnd).strftime("%Y%m%d_%H%M%S") + ' to ' + UTCDateTime(
-#     #     tt + sta * wnd).strftime("%Y%m%d_%H%M%S"))
-#     # if tt > ttL + lta * wnd-sta*wnd:
-#     #     ttL = tt
-#     #     readLta=True
-#     # if readLta:
-#     for s in np.arange(0, ns):
-#         traces[s] = client.get_waveforms('LK', st[s], '', 'EHZ', tt - lta * wnd, tt + lta * wnd)
-#         traces[s].remove_response(client._inv)
-#         #traces[s].filter('bandpass', freqmin=3, freqmax=20, corners=2, zerophase=True)
-#
-#     band=[(3,8),(8,13),(13,18),(18,23),(23,28)]
-#
-#     for s in np.arange(0, ns):
-#
-#         vpp[s]=[]
-#         step=1
-#         ovr=1
-#         for b in np.arange(3,10,step):
-#             tr[s] = traces[s].copy()
-#             tr[s].filter('bandpass', freqmin=b-ovr, freqmax=b+step, corners=2, zerophase=True)
-#             tr[s].trim(tt - sta * wnd, tt + sta * wnd)
-#             vpp[s].append(np.max(obspy.signal.filter.envelope(tr[s][0].data)))#np.max(trAmpl(tr[s])) #np.max(np.abs(tr[s].data))
-#
-#
-#
-#
-#     readLta = False
-#     e=[]
-#     #vCh=(vppOffsetShort/vppOffset)>sl
-#
-#     vCh=np.asarray([np.max(v) for v in vpp ])>th
-#     #vCh[3]=False
-#
-#     print(tt)
-#     print(vpp)
-#     print(vCh)
-#
-#
-#     if (np.sum(vCh))>=3:
-#         # print('vpp')
-#         # print(vpp)
-#         # print('vOffset')
-#         # print(vppOffset)
-#         # print('vOffsetShort')
-#         # print(vppOffsetShort)
-#         # print('vCh')
-#         # print(vCh)
-#         # print('vo')
-#         # print(vOffset)
-#         #vpp = vpp - vOffset
-#         for i in np.arange(0,ns):
-#             for j in np.arange(i+1,ns):
-#                 r[i,j]=vpp[j][0]/vpp[i][0]
-#         #[plt.plot(v) for v in vpp]
-#
-#         e=np.where(vCh == False)
-#         #e=[3]
-#         #aVol1 = locDsp(dst, r, 1, e, [0, dst.shape[0]], [0, dst.shape[1]], [0, dst.shape[2]])
-#
-#         aVol = loc(dst, r, 8, e, [0, dst.shape[0]], [0, dst.shape[1]], [0, dst.shape[2]])
-#
-#         mm = aVol['mPos']
-#         m = aVol['min']
-#         x = grid[0, mm[0], mm[1], mm[2]]
-#         y = grid[1, mm[0], mm[1], mm[2]]
-#         z = grid[2, mm[0], mm[1], mm[2]]
-#         lat, lon = utm.to_latlon(x, y, 25, 'L')
-#         # lat=lat+(np.random.rand()*2-1)/10000
-#         # lon=lon+(np.random.rand()*2-1)/10000
-#         ttt=UTCDateTime(tt)
-#
-#         ev = {
-#             'id': UTCDateTime(ttt).strftime("%m%d%H%M%S"),
-#             'time': UTCDateTime(ttt),
-#            # 'text': 'SWARM ev. mag' + str(pp[5]),
-#             'lat': lat,
-#             'lon': lon,
-#             'dpt': z,
-#             'mag':1,#np.log(np.max(np.asarray(vpp))/th),
-#             'note':'error '+str(m)
-#         }
-#         # client.pushIntEv(ev)
+
 #
 #         aVol = loc(dsts, r, 8, e, [0, dst.shape[0]], [0, dst.shape[1]], [0, dst.shape[2]])
 #
