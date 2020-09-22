@@ -11,17 +11,17 @@ from scipy.optimize import curve_fit
 #import simplekml
 import obspy.signal
 import obspy.signal.cross_correlation
+import seisLib
+import multiprocessing
 plt.switch_backend('tKagg')
 
-client = drumPlot('/mnt/ide/seed/')
-
-wnd=15/3600
-sft=5/3600
 
 
 
-st=['BRK0','BRK1','BRK2','BRK3','BRK4']
-ns=len(st)
+#
+#
+# st=['BRK0','BRK1','BRK2','BRK3','BRK4']
+# ns=len(st)
 # data=np.load('metadata/dst.npz')
 # dst=data['dst']
 # dsts=data['dsts']
@@ -60,35 +60,57 @@ def loc(dstM,r,dec,e,lx,ly,lz):
         dec=np.int(dec/2)
         return loc(dst,r,dec,e,lx,ly,lz)
 
-def run(st):
 
+
+def run(st):
+    wnd=10
+    sft=5
         # l=log()
-        # te=l.rdLog()
+    #te=l.rdLog()
     te=UTCDateTime(2020,8,1,16,30)
     tre={}
-    while 1<2:
+    while True:
         if te<UTCDateTime.now():
-            # l.wrLog(te)
-            te=te+sft*3600
-            tr=client.get_waveforms('LK', 'BRK?', '', 'EHZ', te-120,te)
-            tr.remove_response(client._inv)
-            tr.filter('bandpass', freqmin=4, freqmax=12, corners=3, zerophase=True)
+            try:
+                tr=sysStz._raw[0].copy()
+                tr.filter('bandpass', freqmin=4, freqmax=12, corners=3, zerophase=True)
+                tr.trim(te-wnd,te)
+                for s in range(0,len(st)):
+                    trs=tr.select('LK',st[s],'','EHZ')
+                    tre[s]=obspy.signal.filter.envelope(trs[0].data)
 
-            for s in range(0,len(st)):
-                trs=tr.select('LK',st[s],'','EHZ')
-                tre[s]=obspy.signal.filter.envelope(trs[0].data)
                 cc=[]
-            for s in range(0,len(st)):
-                for s1 in range(s,len(st)):
-                    c=obspy.signal.cross_correlation.correlate(tre[s],tre[s1],len(tre[s]))
-                    cc[s, s1] =np.max(c)
-            print('pp')
+                for s in range(0,len(st)):
+                    for s1 in range(s,len(st)):
+                        c=obspy.signal.cross_correlation.correlate(tre[s],tre[s1],len(tre[s]))
+                        cc[s, s1] =np.max(c)
+                print('pp')
+            except:
+                pass
+            te=te+sft;
         else:
-            time.sleep(10)
-
-run(st)
+            time.sleep(1)
 
 
+sysStz = seisLib.sysStations(['BRK0', 'BRK1', 'BRK2', 'BRK3', 'BRK4'], 'LK', 'seismic.stationsTST')
+
+
+def clientAcq(sysStz):
+    client = drumPlot('/mnt/ide/seed/')
+    client._sysStations = sysStz
+    client.runAcq(120,720*60)
+
+pp = multiprocessing.Process(target=clientAcq, name='RUNACQ',args=(sysStz,))
+pp.start()
+
+run(['BRK0', 'BRK1', 'BRK2', 'BRK3', 'BRK4'])
+s=1
+# while s<2:
+#     print('xx')
+#     time.sleep(15)
+#     print(sysStz._raw[0])
+
+pp.join()
 #
 #
 #

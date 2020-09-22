@@ -392,7 +392,7 @@ class alert():
             print(type+' '+station+' '+str(self._a['rate'])+' '+str(self._a['level']))
             self.insert()
             if self._a['level']>0:
-                self._sysStations.insertAlert(te, "'*'", self._a['event_type'], self._a['level'], 2*self._rTh['sft'] * 3600,
+                self._sysStations.insertAlert(te, "'*'", self._a['event_type'], self._a['level']+1, 2*self._rTh['sft'] * 3600,
                                               'CASP hourly rate alarm ')
 
             r=True
@@ -481,7 +481,7 @@ class alert():
                     self.insert()
             #self._sysStations.updateStz(st,'_CL_HR',l)
             if l>0:
-                self._sysStations.insertAlert(te,[st],self._a['event_type'],l,2*self._rTh['sft']*3600,'Cluster hourly rate alarm ')
+                self._sysStations.insertAlert(te,[st],self._a['event_type'],l+1,2*self._rTh['sft']*3600,'Cluster hourly rate alarm ')
 
 class drumPlot(Client):
 
@@ -763,21 +763,71 @@ class drumPlot(Client):
                 self._2minRTraces.sort()
 
                 # self._sysStations._raw=self._2minRTraces.copy()
-
+                print('traces ok')
                 if (not self._elRunning):
+                    print('an start')
                     self.An(self._alertTable)
-
+                    print('an done')
                 if (self._tNow.minute % self._rtSft == 0) & (self._lastData.minute % self._rtSft != 0):
+                    print('getting ev')
                     a.getAlerts(self._tEnd-3600*24,self._tEnd,'*','CASP')
                     self._events=[dict(time=UTCDateTime(aa['utc_time']), text='CASP ev. mag' + str(aa['magnitudo'])) for aa in a._aList]
+                    print('ev done')
                     if (not self._rtRunning) & rt:
+
                         pRt = multiprocessing.Process(target=self.realTimeDrumPlot)
                         pRt.start()
+
 
                 if (self._tEnd.minute == 0) & (self._lastData.minute != 0):
                     if not self._hyRunning:
                         pHy = multiprocessing.Process(target=self.hystDrumPlot)
                         pHy.start()
+
+                l.wrLog(self._tEnd)
+            self._lastData = self._tNow
+
+
+    def runAcq(self,tBufShort=120,tBufLong=720*60):
+
+        l=log()
+        self._tNow=l.rdLog()
+        k=self._sysStations._stations.keys()
+        network=self._sysStations._stations[k[0]]._network
+        station=[self._sysStations._stations[st]._name for st in self._sysStations._stations.keys()]
+
+        channel="EH?"
+
+        while 1 < 2:
+
+            if self._tNow>UTCDateTime.now()-5:
+                time.sleep(5)
+                self._tNow = UTCDateTime.now()
+            else:
+                self._tNow += 10
+
+            print(self._tNow)
+
+            if self._tNow.second < self._lastData.second:
+                self._tEnd = self._tNow
+
+                print('getting traces')
+                for s in station:
+                    try:
+                        self._traces+=self.get_waveforms(network, s, '', channel, self._tEnd - tBufLong,
+                                                          self._tEnd)
+                        self._traces.merge(fill_value=0)
+                    except:
+                        print('failed to get traces')
+
+                s = self._traces.copy()
+                s.trim(self._tEnd - tBufShort, self._tEnd)
+                s.remove_response(self._inv)
+                s.sort()
+                try:
+                    self._sysStations._raw[0]=s.copy()
+                except:
+                    self._sysStations._raw.append(s.copy())
 
                 l.wrLog(self._tEnd)
             self._lastData = self._tNow
