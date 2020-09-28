@@ -56,22 +56,24 @@ class log():
         pName = multiprocessing.current_process().name
         self._lastElaborate=t
         with open(pName+'.json', 'w') as fp:
+            tstr=self._lastElaborate.strftime("%Y-%m-%d %H:%M:%S")
             s={
-                'last':self._lastElaborate.strftime("%Y-%m-%d %H:%M:%S")
+                'last':tstr
             }
             json.dump(s, fp)
             fp.close()
-            print('saved')
+            #print('saved '+pName+' '+tstr)
 
 class sysStations():
     _refresh=5
-
+    _network=''
 
     def __init__(self,sts,net,table='seismic.stations',refresh=5):
         self._stations=multiprocessing.Manager().dict()
         self._alarms=multiprocessing.Manager().dict()
         self._raw=multiprocessing.Manager().list()
         self._refresh=refresh
+        self._network=net
         for s in sts:
             self._stations[net+"_"+s]=sysStation(s,net)
         self._table = table
@@ -128,7 +130,7 @@ class sysStations():
                 except:
                     print('DB update failed')
                     pass
-                l = 0
+                l = 1
                 if len(al)>0:
                     for e in al:
                         if e._level>l:
@@ -149,7 +151,7 @@ class sysStations():
                 if a._latency > a._maxLatency:
                     a._status = 0
                 else:
-                    a._status = l + 1
+                    a._status = l
                 # self.updateDB(a)
                 sql = "update " + self._table + " set latency=" + str(a._latency) + ", status=" + str(
                     a._status) + " where name='" + str(
@@ -161,7 +163,6 @@ class sysStations():
                     print('station DB update failed')
                 pass
             self.connection.close()
-
 
     def insertAlert(self,time,k,type,l,tOff,text=''):
         if k=="'*'" or k=='*' or k=="*":
@@ -191,7 +192,7 @@ class sysStations():
             a._status = 0
         else:
             l=np.max([a._CL_HR,a._HR,a._AM,a._MAG])
-            a._status = l + 1
+            a._status = l
 
         self._stations[key] = a
 
@@ -238,7 +239,7 @@ class sysStation():
     _name=''
     _network=''
     _intName=''
-    _maxLatency=15
+    _maxLatency=15*60
 
 
     def __init__(self,name,net):
@@ -427,6 +428,31 @@ class alert():
             r=True
         return r
 
+    def hourlyRateAmplitude(self,te,station,type='AML'):
+        r=False
+        ts=te-3600*self._rTh['wnd']
+        self.getAlerts(ts,te,station,type)
+        aa=self._aList
+        if len(aa)>0:
+            self._time=te
+            self._a['event_type'] = "'HR_"+type+"'"
+            self._a['station'] = "'"+station+"'"
+            self._a['max_amplitude'] =np.max([m['max_amplitude'] for m in aa])
+            self._a['median_amplitude'] =np.median([m['median_amplitude'] for m in aa])
+            self._a['rate'] = np.sum([m['rate'] for m in aa])
+            fR = np.where(self._rateX >= self._a['rate'])[0]
+            fA = np.where(self._amplY <= self._a['max_amplitude'])[0]
+            fR = fR[0]
+            fA = fA[0]
+            self._a['level'] = np.int(self._thMatrix[fA, fR])
+            print(type+' '+station+' '+str(self._a['rate'])+' '+str(self._a['level']))
+            self.insert()
+            r=True
+        return r
+
+
+
+
 
     def HR_run(self,st,aType):
 
@@ -527,8 +553,9 @@ class drumPlot(Client):
         'lowFW': [1,20],
         'highFW': [20,50],
         'lowFTh': 0.00001,
-        'highFTh': 0.00005
-
+        'highFTh': 0.00005,
+        'sft':1/3600,
+        'wnd':1/3600
     }
 
 
@@ -707,6 +734,99 @@ class drumPlot(Client):
                     pass
 
         self._elRunning = False
+
+    def multiAmplitudeRawAn(self):
+        for st in self._sysStations._stations.keys():
+            stName=self._sysStations._stations[st]._name
+            multiprocessing.Process(target=self.amplitudeRawAn, name=st, args=(self._sysStations._network,stName,)).start()
+
+    def amplitudeRawAn(self,network,station):
+
+        l = log()
+        te = l.rdLog()
+
+        sft=np.int(self._amplAn['sft']*3600)
+        wnd=np.int(self._amplAn['wnd']*3600)
+        while True:
+            try:
+                lastTime=np.min([UTCDateTime(self._get_current_endtime(network,station,'',ch )) for ch in ['EHZ','EHN','EHZ']])
+                print('amplitude analisys try' + station + ' lt:' + str(lastTime) + ' te:' + str(te))
+                stName=network + "_" + station
+                self._sysStations.updateLatency(stName, np.int(UTCDateTime.now()-lastTime))
+                if lastTime>te+86400:
+                    te=lastTime
+
+                teMax=te+wnd/2
+                teMin = te - wnd / 2
+
+                if teMax<lastTime-wnd/2:
+                    print('amplitude analisys ' + stName + ' lt:' + str(lastTime) + ' te:' + str(te))
+                    tr = self.get_waveforms(network, station, '', 'EH?', te - wnd,
+                                            te + wnd)
+                    tr.merge(fill_value=0)
+                    tr.remove_response(self._inv)
+
+
+
+                    appTraceLow = tr.copy()
+                    appTraceLow.filter('bandpass', freqmin=self._amplAn['lowFW'][0], freqmax=self._amplAn['lowFW'][1], corners=3,
+                                    zerophase=True)
+                    appTraceLow.trim(teMin, teMax)
+
+                    appTraceHigh =tr.copy()
+                    appTraceHigh.filter('bandpass', freqmin=self._amplAn['highFW'][0], freqmax=self._amplAn['highFW'][1], corners=3,
+                                       zerophase=True)
+                    appTraceHigh.trim(teMin, teMax)
+
+                    envL =[obspy.signal.filter.envelope(st.data) for st in appTraceLow]
+                    ee=envL[0]
+                    en=envL[1]
+                    ez=envL[2]
+                    am = np.sqrt(ee ** 2 + en ** 2 + ez ** 2)
+                    if np.max(am)>self._amplAn['lowFTh']:
+                        a = alert(self._alertTable)
+                        a._time = te
+                        a._a['event_type'] = "'AML'"
+                        a._a['station'] = "'" + stName + "'"
+                        a._a['amplitude_ehe'] = np.max(ee)
+                        a._a['amplitude_ehn'] = np.max(en)
+                        a._a['amplitude_ehz'] = np.max(ez)
+                        a._a['median_amplitude']=np.median(am)
+                        a._a['max_amplitude']=np.max(am)
+                        r=np.diff((am>self._amplAn['lowFTh'])*1)
+                        a._a['rate']=len(r[r>0])
+                        a.insert()
+
+
+                    envH = [obspy.signal.filter.envelope(st.data) for st in appTraceHigh]
+                    ee = envH[0]
+                    en = envH[1]
+                    ez = envH[2]
+                    am = np.sqrt(ee ** 2 + en ** 2 + ez ** 2)
+                    if np.max(am) > self._amplAn['highFTh']:
+                        a = alert(self._alertTable)
+                        a._time = te
+                        a._a['event_type'] = "'AMH'"
+                        a._a['station'] = "'" + stName + "'"
+                        a._a['amplitude_ehe'] = np.max(ee)
+                        a._a['amplitude_ehn'] = np.max(en)
+                        a._a['amplitude_ehz'] = np.max(ez)
+                        a._a['median_amplitude'] = np.median(am)
+                        a._a['max_amplitude'] = np.max(am)
+                        r = np.diff((am > self._amplAn['lowFTh']) * 1)
+                        a._a['rate'] = len(r[r > 0])
+                        a.insert()
+                    te = te + sft
+                    l.wrLog(te)
+
+                else:
+                    time.sleep(np.int(sft/2))
+
+            except:
+                print('amplitude analisys '+stName+ ' failed')
+                te=te+sft
+                time.sleep(sft)
+                l.wrLog(te)
 
 
 

@@ -14,33 +14,34 @@ from seisLib import drumPlot
 import seisLib
 import numpy as np
 
-from obspy import  UTCDateTime
+sysStz=seisLib.sysStations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK','seismic.stationstst')
 
-# stz=seisLib.stations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK')
-sysStz=seisLib.sysStations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK','seismic.stationsTST')
+def acqProcess(sysStz):
+
+    client = seisLib.drumPlot('/mnt/ide/seed/')
+    client._sysStations=sysStz
+    client.runAcq(120,720*60)
+
 def rawProcess(sysStz):
 
     client = seisLib.drumPlot('/mnt/ide/seed/')
-
-    client._alertTable='seismic.alerts'
-    client._basePath = '/home/geoapp/'
-    client._basePathRT = '/mnt/geoAppServer/'
-
+    client._alertTable='seismic.alertstst'
     client._amplAn = {
         'lowFW': [1, 20],
         'highFW': [20, 50],
         'lowFTh': 0.00001,
-        'highFTh': 0.00005
-
+        'highFTh': 0.00001,
+        'sft':1/60,
+        'wnd':1/60
     }
     client._sysStations=sysStz
-    #client.multiPr_run('LK', 'BRK?', 'E??' )
-    client.run('LK', 'BRK?', 'E??')
+    client.multiAmplitudeRawAn()
+
 
 def rawProcessCASP(sysStz):
 
     client = seisLib.drumPlot('/mnt/ide/seed/')
-    client._alertTable='seismic.alerts'
+    client._alertTable='seismic.alertsTST'
     client._sysStations=sysStz
     client._rTh = {
         'AML': 0,
@@ -52,13 +53,17 @@ def rawProcessCASP(sysStz):
     client.rtCASP(False)
 
 
+
+#POST PROCESS ***********************************************
+
+
 def postProcess(sysStz):
 
     st=['LK_BRK0','LK_BRK1','LK_BRK2','LK_BRK3','LK_BRK4']
     cl=[('LK_BRK0','LK_BRK2'),('LK_BRK1','LK_BRK2'),('LK_BRK1','LK_BRK4'),('LK_BRK3','LK_BRK4')]
 
 
-    al=seisLib.alert('seismic.alerts')
+    al=seisLib.alert('seismic.alertstst')
 
 
     al._th = {  # soglie su cui definire rate
@@ -92,7 +97,7 @@ def postProcessCASP(sysStz):
 
     st=['LK_BRK0','LK_BRK1','LK_BRK2','LK_BRK3','LK_BRK4']
 
-    al=seisLib.alert('seismic.alerts')
+    al=seisLib.alert('seismic.alertstst')
 
     al._th = {  # soglie su cui definire rate
         'AML': 0.00005,
@@ -122,21 +127,22 @@ def postProcessCASP(sysStz):
 if __name__ == '__main__':
 
     pr = multiprocessing.Process(target=rawProcess, name='RAW', args=(sysStz,))
-    # pr.start()
+    pr.start()
 
-    prCASP = multiprocessing.Process(target=rawProcessCASP, name='RAWCASP', args=(sysStz,))
-    prCASP.start()
+    # prCASP = multiprocessing.Process(target=rawProcessCASP, name='RAWCASP', args=(sysStz,))
+    # prCASP.start()
+    #
+    #
+    # pp = multiprocessing.Process(target=postProcess, name='PP', args=(sysStz,))
+    # # pp.start()
+    #
+    # pc = multiprocessing.Process(target=postProcessCASP, name='PC', args=(sysStz,))
+    # pc.start()
 
+    sysStz.run('seismic.alarmstst')
 
-    pp = multiprocessing.Process(target=postProcess, name='PP', args=(sysStz,))
-    # pp.start()
-
-    pc = multiprocessing.Process(target=postProcessCASP, name='PC', args=(sysStz,))
-    pc.start()
-
-    sysStz.run('seismic.alarmsTST')
 
     pr.join()
-    prCASP.join()
-    pp.join()
-    pc.join()
+    # prCASP.join()
+    # pp.join()
+    # pc.join()

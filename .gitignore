@@ -6,3 +6,7 @@ lastRaw\.json
 \.idea/
 
 __pycache__/
+
+metadata/
+
+test/benchmark_signals/

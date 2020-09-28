@@ -17,8 +17,16 @@ import seisLib
 import multiprocessing
 plt.switch_backend('tKagg')
 
-
-
+def rmsEnvelope(data,wnd):
+    t=0
+    ld=len(data)
+    r=np.zeros(ld)
+    data1=np.zeros((np.int(ld/wnd)+1)*wnd)
+    data1[0:len(data)]=data[0:]
+    while t<=len(data)-wnd:
+        r[t]=np.sqrt(np.sum(data1[t:t+wnd]**2))/wnd
+        t+=1
+    return r
 
 
 
@@ -122,10 +130,12 @@ def run(st):
             for sName in sList:
                 a=tr.select('*',sName,'','EHZ')[0].copy()
                 b = tr.select('*', sName, '', 'EHZ')[0].copy()
+                b.filter('bandpass', freqmin=3, freqmax=12, corners=3, zerophase=True)
                 ttr[sName]=a
-                ttr[sName].data= obspy.signal.filter.envelope(b.data)
-                ttr[sName].filter('bandpass', freqmin=1, freqmax=10, corners=3, zerophase=True)
-                # ttr[sName].trim(te-wnd,te)
+                #ttr[sName].data= obspy.signal.filter.envelope(b.data)
+                ttr[sName].data=rmsEnvelope(b.data,50)
+
+            [ttr[n].trim(te-wnd,te) for n in ttr.keys()]
 
             for s in range(0,len(sName)):
                 for s1 in range(s+1,len(sName)):
