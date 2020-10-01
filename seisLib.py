@@ -18,6 +18,7 @@ import time
 import numpy as np
 
 from sch import log
+import urllib.request, json
 
 dpi = 100
 sizex = 800
@@ -210,7 +211,7 @@ class sysStation():
     _name=''
     _network=''
     _intName=''
-    _maxLatency=15*60
+    _maxLatency=60*60
 
 
     def __init__(self,name,net):
@@ -483,6 +484,34 @@ class alert():
             if l>0:
                 self._sysStations.insertAlert(te,[st],self._a['event_type'],l+1,2*self._rTh['sft']*3600,'Cluster hourly rate alarm ')
 
+    def clusterAn(self,te,cl,evType='HR_AML'):
+        lag=3600
+        for stGroup in cl:
+            print('CLUSTER AN')
+            ll=[]
+            n = 0
+            try:
+                for st in stGroup:
+                    if self.getAlerts(te - np.int(lag), te, st, evType): # 'ORDER BY utc_time DESC LIMIT 1'):
+                        l=np.max([a['level'] for a in self._aList])
+                        if l>0:
+                            ll.append(l)
+                            n += 1
+            except:
+                pass
+            l=0
+            if len(ll) == len(stGroup):
+                l=np.max(ll)
+                for st in stGroup:
+                    self._time=te
+                    self._a['event_type'] = "'CL_" + evType + "'"
+                    self._a['station'] = "'" + st + "'"
+                    self._a['level'] = l
+                    self.insert()
+            #self._sysStations.updateStz(st,'_CL_HR',l)
+            if l>0:
+                self._sysStations.insertAlert(te,[st],self._a['event_type'],l+1,2*self._rTh['sft']*3600,'Cluster hourly rate alarm ')
+
 class drumPlot(Client):
 
     _log={
@@ -522,7 +551,7 @@ class drumPlot(Client):
     _elabHyst={}
     _events = []
     _alertTable=''
-
+    _localTimeOffset=0
     _amplAn = {
         'lowFW': [1,20],
         'highFW': [20,50],
@@ -567,7 +596,7 @@ class drumPlot(Client):
                             x_labels_size=int(8 * 100 / int(dpi)),
                             y_labels_size=int(8 * 100 / int(dpi)),
                             title_size=int(1000 / int(dpi)),
-                            title=self._tEnd.strftime("%Y/%m/%d %H:%M:%S"),
+                            title=(self._tEnd+self._localTimeOffset).strftime("%Y/%m/%d %H:%M:%S"),
                             size=(sizex, sizey),
                             color=('#AF0000', '#00AF00', '#0000AF'),
                             vertical_scaling_range=yRange,
@@ -618,14 +647,14 @@ class drumPlot(Client):
         print('realTime end ' + UTCDateTime.now().strftime("%Y%m%d %H%M%S"))
         self._rtRunning = False
 
-    def hystDrumPlot(self,tEnd=0):
-
+    def hystDrumPlot(self):
+        tEnd=self._tEnd+self._localTimeOffset
         appTrace = Stream()
         self._hyRunning = True
-        if tEnd==0:
-            tEnd=self._tEnd
-        else:
-            self._tEnd=tEnd
+        # if tEnd==0:
+        #     tEnd=self._tEnd
+        # else:
+        #     self._tEnd=tEnd
         print('Hyststart ' + tEnd.strftime("%Y%m%d %H%M%S"))
         for tr in self._traces:
             id = tr.get_id()
@@ -647,7 +676,7 @@ class drumPlot(Client):
                         fileName = p + '/' + tStart.strftime("%Y%m%d%H")+ '00.png'
                         appTrace = tr.copy()
                         bb = band[b]
-                        appTrace.trim(tStart, tEnd, pad=True, fill_value=0)
+                        appTrace.trim(tStart-self._localTimeOffset, tEnd-self._localTimeOffset, pad=True, fill_value=0)
                         appTrace.filter('bandpass', freqmin=bb[0], freqmax=bb[1], corners=2, zerophase=True)
                         self.plotDrum(appTrace, self._basePath + fileName)
         self._hyRunning = False
@@ -899,9 +928,9 @@ class drumPlot(Client):
             'BRK4': self._inv.get_coordinates('LK.BRK4..EHZ'),
         }
 
-        with open(self._basePathRT+'elab_status.json', 'w') as fp:
-            json.dump(self._stationData, fp)
-            fp.close()
+        # with open(self._basePathRT+'elab_status.json', 'w') as fp:
+        #     json.dump(self._stationData, fp)
+        #     fp.close()
 
         self._tNow=tStart
         a=alert(self._alertTable)
@@ -921,7 +950,12 @@ class drumPlot(Client):
 
             if self._tNow.second < self._lastData.second:
                 self._tEnd = self._tNow
-
+                # try:
+                #     with urllib.request.urlopen("http://worldtimeapi.org/api/timezone/America/Maceio") as url:
+                #         data = json.loads(url.read().decode())
+                #         self._localTimeOffset=np.int(data['dst_offset'])+np.int(data['raw_offset'])
+                # except:
+                #     pass
 
                 print('getting traces')
                 try:
@@ -946,7 +980,7 @@ class drumPlot(Client):
                 if (self._tNow.minute % self._rtSft == 0) & (self._lastData.minute % self._rtSft != 0):
                     print('getting ev')
                     a.getAlerts(self._tEnd-3600*24,self._tEnd,'*','CASP')
-                    self._events=[dict(time=UTCDateTime(aa['utc_time']), text='CASP ev. mag' + str(aa['magnitudo'])) for aa in a._aList]
+                    self._events=[dict(time=UTCDateTime(aa['utc_time'])+self._localTimeOffset, text='CASP ev. mag' + str(aa['magnitudo'])) for aa in a._aList]
                     print('ev done')
                     if (not self._rtRunning) & rt:
 

@@ -9,6 +9,19 @@ class log():
 
     _lastElaborate=UTCDateTime
 
+    def rdLogCluster(self, pName=[]):
+
+        try:
+            for pp in pName:
+                with open(pp + '.json', 'r') as fp:
+                    p = json.load(fp)
+                    self._lastElaborate = UTCDateTime.strptime(p['last'], "%Y-%m-%d %H:%M:%S")
+                    fp.close()
+                    te = self._lastElaborate
+        except:
+            te = UTCDateTime.now()
+            pass
+        return te
 
     def rdLog(self,pName=''):
         if pName=='':
@@ -23,6 +36,8 @@ class log():
             te=UTCDateTime.now()
             pass
         return te
+
+
 
     def wrLog(self,t):
         pName = multiprocessing.current_process().name
@@ -77,7 +92,7 @@ class sch:
             else:
                 self._maxElaborationTime = self._maxTFnc(*self._maxTArgs)
             if self._actualElaborationTime>self._maxElaborationTime:
-                time.sleep(2)
+                time.sleep(np.int(self._sft/2))
             else:
                 #to do
                 fnc(self._actualElaborationTime,*args)
