@@ -9,8 +9,8 @@ class log():
 
     _lastElaborate=UTCDateTime
 
-    def rdLogCluster(self, pName=[]):
-
+    def rdLogCluster(self,*args):
+        pName=args
         try:
             for pp in pName:
                 with open(pp + '.json', 'r') as fp:

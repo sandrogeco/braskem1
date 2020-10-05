@@ -78,8 +78,8 @@ def postProcess(sysStz):
     al._rateX=np.arange(0,100,1)
     al._amplY=np.arange(0.01,-0.0001,-0.0001)
     al._thMatrix=np.zeros([len(al._amplY),len(al._rateX)])
-    al._thMatrix[0:np.where(al._amplY>0.0004)[0][-1],5:]=1
-    al._thMatrix[0:np.where(al._amplY>0.0008)[0][-1],20:]=2
+    al._thMatrix[0:np.where(al._amplY>0.00005)[0][-1],20:]=1
+    al._thMatrix[0:np.where(al._amplY>0.0008)[0][-1],30:]=2
     al._thMatrix[0:np.where(al._amplY>0.002)[0][-1],40:]=3
     al._clusters=cl
 

@@ -318,9 +318,13 @@ class alert():
             sql="SELECT "+"".join(str(s) + "," for s in self._a.keys())
             sql = sql[0:-1]
 
-            sql+=" FROM "+self._table+ " WHERE station='"+station+"' AND event_type='"+event_type+\
-                "' AND utc_time>'"+UTCDateTime(ts).strftime("%Y-%m-%d %H:%M:%S")+\
-            "' AND utc_time<'"+UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S")+"' "+extra+" ;"
+            if te==ts:
+                sql += " FROM " + self._table + " WHERE station='" + station + "' AND event_type='" + event_type + \
+                       "' AND utc_time='" + UTCDateTime(ts).strftime("%Y-%m-%d %H:%M:%S") + "' " + extra + " ;"
+            else:
+                sql+=" FROM "+self._table+ " WHERE station='"+station+"' AND event_type='"+event_type+\
+                    "' AND utc_time>'"+UTCDateTime(ts).strftime("%Y-%m-%d %H:%M:%S")+\
+                "' AND utc_time<'"+UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S")+"' "+extra+" ;"
             cr = self.connection.cursor()
 
             cr.execute(sql)
@@ -344,7 +348,7 @@ class alert():
         return r
 
     def hourlyRateMag(self,te,station,type='CASP'):
-        print(te)
+        print('HR_CASP'+str(te))
         r=False
         ts=te-3600*self._rTh['wnd']
         self.getAlerts(ts,te,station,type)
@@ -414,12 +418,12 @@ class alert():
             self._a['max_amplitude'] =np.max([m['max_amplitude'] for m in aa])
             self._a['median_amplitude'] =np.median([m['median_amplitude'] for m in aa])
             self._a['rate'] = np.sum([m['rate'] for m in aa])
-            fR = np.where(self._rateX >= self._a['rate'])[0]
-            fA = np.where(self._amplY <= self._a['max_amplitude'])[0]
-            fR = fR[0]
-            fA = fA[0]
-            self._a['level'] = np.int(self._thMatrix[fA, fR])
-            print(type+' '+station+' '+str(self._a['rate'])+' '+str(self._a['level']))
+            # fR = np.where(self._rateX >= self._a['rate'])[0]
+            # fA = np.where(self._amplY <= self._a['max_amplitude'])[0]
+            # fR = fR[0]
+            # fA = fA[0]
+            # self._a['level'] = np.int(self._thMatrix[fA, fR])
+            print(type+' '+station+' '+str(self._a['rate'])+' '+str(self._a['max_amplitude']))
             self.insert()
             r=True
         return r
@@ -485,32 +489,38 @@ class alert():
                 self._sysStations.insertAlert(te,[st],self._a['event_type'],l+1,2*self._rTh['sft']*3600,'Cluster hourly rate alarm ')
 
     def clusterAn(self,te,cl,evType='HR_AML'):
-        lag=3600
-        for stGroup in cl:
-            print('CLUSTER AN')
-            ll=[]
-            n = 0
-            try:
-                for st in stGroup:
-                    if self.getAlerts(te - np.int(lag), te, st, evType): # 'ORDER BY utc_time DESC LIMIT 1'):
-                        l=np.max([a['level'] for a in self._aList])
-                        if l>0:
-                            ll.append(l)
-                            n += 1
-            except:
-                pass
-            l=0
-            if len(ll) == len(stGroup):
-                l=np.max(ll)
-                for st in stGroup:
-                    self._time=te
-                    self._a['event_type'] = "'CL_" + evType + "'"
-                    self._a['station'] = "'" + st + "'"
-                    self._a['level'] = l
-                    self.insert()
-            #self._sysStations.updateStz(st,'_CL_HR',l)
-            if l>0:
-                self._sysStations.insertAlert(te,[st],self._a['event_type'],l+1,2*self._rTh['sft']*3600,'Cluster hourly rate alarm ')
+
+        ll=[]
+        n = 0
+        try:
+            print('CLUSTER AN ' + str(te))
+            for st in cl:
+
+                if self.getAlerts(te, te, st, evType): # 'ORDER BY utc_time DESC LIMIT 1'):
+                    for a in self._aList:
+                        fR = np.where(self._rateX >= a['rate'])[0]
+                        fA = np.where(self._amplY <= a['max_amplitude'])[0]
+                        fR = fR[0]
+                        fA = fA[0]
+                        l= np.int(self._thMatrix[fA, fR])
+
+                    if l>0:
+                        ll.append(l)
+                        n += 1
+        except:
+            pass
+        l=0
+        if len(ll) == len(cl):
+            l=np.max(ll)
+            for st in cl:
+                self._time=te
+                self._a['event_type'] = "'CL_" + evType + "'"
+                self._a['station'] = "'" + st + "'"
+                self._a['level'] = l
+                self.insert()
+        #self._sysStations.updateStzggggggggggggggggg(st,'_CL_HR',l)
+        if l>0:
+            self._sysStations.insertAlert(te,[st],self._a['event_type'],l+1,2*self._rTh['sft']*3600,'Cluster hourly rate alarm ')
 
 class drumPlot(Client):
 
@@ -590,7 +600,7 @@ class drumPlot(Client):
             trace.data = trace.data * 1000 / 3.650539e+08
             if not os.path.exists(os.path.dirname(filename)):
                 os.makedirs(os.path.dirname(filename))
-
+            trace.interpolate(sampling_rate=trace.stats['sampling_rate'], time_shift=self._localTimeOffset)
             trace.plot(type='dayplot',
                             dpi=dpi,
                             x_labels_size=int(8 * 100 / int(dpi)),
@@ -601,6 +611,7 @@ class drumPlot(Client):
                             color=('#AF0000', '#00AF00', '#0000AF'),
                             vertical_scaling_range=yRange,
                             outfile=filename,
+                            show_y_UTC_label=True,
                             #handle=True,
                             time_offset=-3,
                             data_unit='mm/s',
@@ -1068,6 +1079,43 @@ class drumPlot(Client):
             a._a['erz'] = pp[8]
             a.insert(False)
         connection.close()
+
+    def getCaspTime(self,te):
+        p=[]
+        try:
+            ts=te-self._rTh['wnd']*3600
+            connection = psycopg2.connect(host='172.16.8.10', port='5432', database='casp_events', user='sismoweb',
+                                          password='lun1t3k@@',connect_timeout=10)
+            sql = "SELECT event_id, t0, lat, lon, dpt, magWA,reliable,erh,erz FROM auto_eventi where t0>'"+ts.strftime("%Y-%m-%d %H:%M:%S")+"'and t0<'"+te.strftime("%Y-%m-%d %H:%M:%S")+"' order by t0 asc;"
+            cursor = connection.cursor()
+            cursor.execute(sql)
+            p = cursor.fetchall()
+            print('get CASP '+UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S"))
+        except:
+            print('get CASP failed')
+            pass
+        a = alert(self._alertTable)
+
+        for pp in p:
+            a._time =UTCDateTime(pp[1])
+            a._a['event_type'] = "'CASP'"
+            a._a['station'] = "'*'"
+            a._a['lat'] =np.float(pp[2])
+            a._a['lon'] = np.float(pp[3])
+            a._a['magnitudo'] = np.float(pp[5])
+            a._a['depth'] = np.float(pp[4])
+            a._a['id_casp'] = pp[0]
+            a._a['rel'] = pp[6]
+            a._a['erh'] = pp[7]
+            a._a['erz'] = pp[8]
+            a.insert(False)
+
+
+        connection.close()
+
+    def rawCASP(self,te):
+        self.getCaspTime(te)
+        self.rtAlertCASP(te)
 
     def rtAlertCASP(self,te):
         a=alert()
