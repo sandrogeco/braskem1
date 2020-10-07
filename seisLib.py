@@ -43,6 +43,7 @@ class sysStations():
     def __init__(self,sts,net,table='seismic.stations',refresh=5):
         self._stations=multiprocessing.Manager().dict()
         self._alarms=multiprocessing.Manager().dict()
+
         self._raw=multiprocessing.Manager().list()
         self._refresh=refresh
         self._network=net
@@ -324,7 +325,7 @@ class alert():
             else:
                 sql+=" FROM "+self._table+ " WHERE station='"+station+"' AND event_type='"+event_type+\
                     "' AND utc_time>'"+UTCDateTime(ts).strftime("%Y-%m-%d %H:%M:%S")+\
-                "' AND utc_time<'"+UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S")+"' "+extra+" ;"
+                "' AND utc_time<='"+UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S")+"' "+extra+" ;"
             cr = self.connection.cursor()
 
             cr.execute(sql)
@@ -692,7 +693,66 @@ class drumPlot(Client):
                         self.plotDrum(appTrace, self._basePath + fileName)
         self._hyRunning = False
 
+    def singleStationRealTimeDrumPlot(self,te,network,station):
+        print('RealTime plot start ' + UTCDateTime.now().strftime("%Y%m%d %H%M%S"))
 
+        a=alert(self._alertTable)
+        a.getAlerts(self._tEnd - 3600 * 24, self._tEnd, '*', 'CASP')
+        self._events = [
+            dict(time=UTCDateTime(aa['utc_time']) + self._localTimeOffset, text='CASP ev. mag' + str(aa['magnitudo']))
+            for aa in a._aList]
+
+        tEnd = te
+        tStart=tEnd-60*self._rTWindow
+        for b in self._band:
+            tr = self.get_waveforms(network, station, '', 'EH?', tStart, tEnd)
+            tr.merge()
+            tr=tr[0]
+            id = tr.get_id()
+            spl = id.split('.')
+            channel = spl[3]
+
+            fileNameRT = 'RT_' + network + '_' + station + '_' + channel + '_' + str(b) + '.png'
+            appTrace = tr.copy()
+            bb = self._band[b]
+            appTrace.filter('bandpass', freqmin=bb[0], freqmax=bb[1], corners=2, zerophase=True)
+            self.plotDrum(appTrace, self._basePathRT + 'RT/' + fileNameRT)
+
+
+
+    def singleStationHystDrumPlot(self,te,network,station):
+
+        tEnd = te
+        tTrg = te + self._localTimeOffset
+        print('Hyststart ' + te.strftime("%Y%m%d %H%M%S"))
+
+        a=alert(self._alertTable)
+        a.getAlerts(self._tEnd - 3600 * 24, self._tEnd, '*', 'CASP')
+        self._events = [
+            dict(time=UTCDateTime(aa['utc_time']) + self._localTimeOffset, text='CASP ev. mag' + str(aa['magnitudo']))
+            for aa in a._aList]
+
+        for h in self._hystType:
+            if tTrg.hour % int(h / 60) == 0:
+                for b in self._band:
+                    tStart = tEnd - h * 60
+                    tr=self.get_waveforms(network, station, '', 'EH?',tStart,tEnd)
+                    tr.merge()
+                    tr=tr[0]
+                    id = tr[0].get_id()
+                    spl = id.split('.')
+                    channel = spl[3]
+                    p = network + '/' + station + '/' + channel + '/' + str(tStart.year) + '/' + str(
+                        tStart.month) + '/' + str(
+                        tStart.day) + '/' + str(h) + '/' + str(b)
+
+                    fileName = p + '/' + tStart.strftime("%Y%m%d%H") + '00.png'
+                    appTrace = tr.copy()
+                    bb = self._band[b]
+                    appTrace.trim(tStart - self._localTimeOffset, tEnd - self._localTimeOffset, pad=True,
+                                  fill_value=0)
+                    appTrace.filter('bandpass', freqmin=bb[0], freqmax=bb[1], corners=2, zerophase=True)
+                    self.plotDrum(appTrace, self._basePath + fileName)
 
     def An(self,table='seismic.alerts'):
         self._elRunning=True
@@ -1091,6 +1151,8 @@ class drumPlot(Client):
             cursor.execute(sql)
             p = cursor.fetchall()
             print('get CASP '+UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S"))
+            connection.close()
+
         except:
             print('get CASP failed')
             pass
@@ -1110,8 +1172,6 @@ class drumPlot(Client):
             a._a['erz'] = pp[8]
             a.insert(False)
 
-
-        connection.close()
 
     def rawCASP(self,te):
         self.getCaspTime(te)

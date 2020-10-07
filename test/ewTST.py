@@ -16,6 +16,8 @@ import numpy as np
 from sch import log
 from sch import sch
 from obspy import UTCDateTime
+import urllib
+import json
 
 sysStz=seisLib.sysStations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK','seismic.stationstst')#,'BRK0','BRK2','BRK3','BRK4'
 cl = [['LK_BRK0', 'LK_BRK2'], ['LK_BRK1', 'LK_BRK2'], ['LK_BRK1', 'LK_BRK4'], ['LK_BRK3', 'LK_BRK4']]
@@ -24,9 +26,17 @@ tForce=UTCDateTime('2020-07-17 00:00:00')
 tForceRaw=0
 tForceHourly=0
 tForceCluster=0
-tForceDrumPlot=0
+tForceDrumPlot=UTCDateTime('2020-10-05 00:00:00')
 tForceCASP=0
-tForceHourlyCASP=UTCDateTime('2020-07-17 00:00:00')
+tForceHourlyCASP=0
+
+
+try:
+    with urllib.request.urlopen("http://worldtimeapi.org/api/timezone/America/Maceio") as url:
+        data = json.loads(url.read().decode())
+        localTimeOffset=np.int(data['dst_offset'])+np.int(data['raw_offset'])
+except:
+    pass
 
 def rawCASP(sysStz):
     client = seisLib.drumPlot('/mnt/ide/seed/')
@@ -83,6 +93,49 @@ def rawProcess(sysStz,network,station):
 
     scheduler=sch(client._amplAn['sft'],'',tForceRaw,client.getLastTime,(network,station))
     scheduler.schRun(client.amplitudeRawAn,(network,station))
+
+
+def rtDrum(sysStz,network,station):
+
+    client = seisLib.drumPlot('/mnt/ide/seed/')
+    client._alertTable='seismic.alertstst'
+
+    client._band = {
+        'low': [1, 20],
+        'high': [20, 50]
+    }
+
+    client._rTWindow = 360
+    client._rtSft = 2/60
+
+    client._basePathRT ='/home/geoapp/RT'
+
+    client._sysStations=sysStz
+    client._localTimeOffset=localTimeOffset
+    scheduler=sch(client._rtSft,'',0,UTCDateTime.now)
+    scheduler.schRun(client.singleStationRealTimeDrumPlot,(network,station))
+
+
+def hyDrum(sysStz, network, station):
+    client = seisLib.drumPlot('/mnt/ide/seed/')
+    client._alertTable = 'seismic.alertstst'
+
+    client._band = {
+        'low': [1, 20],
+        'high': [20, 50]
+    }
+
+    client._hystType = [360, 180, 60]
+
+    client._rTWindow = 360
+    client._rtSft = 2
+
+    client._basePath = '/home/geoapp/new'
+
+    client._sysStations = sysStz
+    client._localTimeOffset = localTimeOffset
+    scheduler=sch(1,'',tForceDrumPlot,UTCDateTime.now)
+    scheduler.schRun(client.singleStationHystDrumPlot,(network,station))
 
 
 
@@ -156,6 +209,23 @@ if __name__ == '__main__':
                                 args=(sysStz,sysStz._network, stName))
         pp.start()
         p.append(pp)
+
+
+    # lancia RTdRUM su tutte le stazioni
+    for st in sysStz._stations.keys():
+        stName =sysStz._stations[st]._name
+        pp=multiprocessing.Process(target=rtDrum, name='RTDRUM_'+st,
+                                args=(sysStz,sysStz._network, stName))
+        pp.start()
+        p.append(pp)
+
+    # for st in sysStz._stations.keys():
+    #     stName =sysStz._stations[st]._name
+    #     pp=multiprocessing.Process(target=hyDrum, name='HYDRUM_'+st,
+    #                             args=(sysStz,sysStz._network, stName))
+    #     pp.start()
+    #     p.append(pp)
+
 
 
     # lancia HR AML AMH amplitude analisys su tutte le stazioni
