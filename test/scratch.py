@@ -190,51 +190,51 @@ def clusterProcess(sysStz,network,cl,type):
 p=[]
 if __name__ == '__main__':
 
-    # #raw casp
-    pp = multiprocessing.Process(target=rawCASP, name='RAW_CASP',
-                                 args=(sysStz,))
-    pp.start()
-    p.append(pp)
-
-    #casp orario
-    pp = multiprocessing.Process(target=hourlyCASP, name='HR_CASP',
-                                 args=(sysStz, sysStz._network, '*'))
-    pp.start()
-    p.append(pp)
-
-    # lancia raw amplitude analisys su tutte le stazioni
-    for st in sysStz._stations.keys():
-        stName =sysStz._stations[st]._name
-        pp=multiprocessing.Process(target=rawProcess, name='RAW_'+st,
-                                args=(sysStz,sysStz._network, stName))
-        pp.start()
-        p.append(pp)
-
-
-
-
-    # lancia HR AML AMH amplitude analisys su tutte le stazioni
-    for st in sysStz._stations.keys():
-        stName =sysStz._stations[st]._name
-        pp=multiprocessing.Process(target=hourlyProcess, name='HR_AML_'+st,
-                                args=(sysStz,sysStz._network, stName,"AML"))
-        pp.start()
-        p.append(pp)
-    for st in sysStz._stations.keys():
-        stName =sysStz._stations[st]._name
-        pp=multiprocessing.Process(target=hourlyProcess, name='HR_AMH_'+st,
-                                args=(sysStz,sysStz._network, stName,"AMH"))
-        pp.start()
-        p.append(pp)
-
-    for cls in cl:
-        clName="__".join(cls)
-        pp=multiprocessing.Process(target=clusterProcess, name='CL_'+clName,
-                                args=(sysStz,sysStz._network, cls,"HR_AML"))
-        pp.start()
-        p.append(pp)
-
-        # lancia RTdRUM su tutte le stazioni
+    # # #raw casp
+    # pp = multiprocessing.Process(target=rawCASP, name='RAW_CASP',
+    #                              args=(sysStz,))
+    # pp.start()
+    # p.append(pp)
+    #
+    # #casp orario
+    # pp = multiprocessing.Process(target=hourlyCASP, name='HR_CASP',
+    #                              args=(sysStz, sysStz._network, '*'))
+    # pp.start()
+    # p.append(pp)
+    #
+    # # lancia raw amplitude analisys su tutte le stazioni
+    # for st in sysStz._stations.keys():
+    #     stName =sysStz._stations[st]._name
+    #     pp=multiprocessing.Process(target=rawProcess, name='RAW_'+st,
+    #                             args=(sysStz,sysStz._network, stName))
+    #     pp.start()
+    #     p.append(pp)
+    #
+    #
+    #
+    #
+    # # lancia HR AML AMH amplitude analisys su tutte le stazioni
+    # for st in sysStz._stations.keys():
+    #     stName =sysStz._stations[st]._name
+    #     pp=multiprocessing.Process(target=hourlyProcess, name='HR_AML_'+st,
+    #                             args=(sysStz,sysStz._network, stName,"AML"))
+    #     pp.start()
+    #     p.append(pp)
+    # for st in sysStz._stations.keys():
+    #     stName =sysStz._stations[st]._name
+    #     pp=multiprocessing.Process(target=hourlyProcess, name='HR_AMH_'+st,
+    #                             args=(sysStz,sysStz._network, stName,"AMH"))
+    #     pp.start()
+    #     p.append(pp)
+    #
+    # for cls in cl:
+    #     clName="__".join(cls)
+    #     pp=multiprocessing.Process(target=clusterProcess, name='CL_'+clName,
+    #                             args=(sysStz,sysStz._network, cls,"HR_AML"))
+    #     pp.start()
+    #     p.append(pp)
+    #
+    #     # lancia RTdRUM su tutte le stazioni
     # for st in sysStz._stations.keys():
     #     stName = sysStz._stations[st]._name
     #     pp = multiprocessing.Process(target=rtDrum, name='RTDRUM_' + st,
@@ -242,12 +242,12 @@ if __name__ == '__main__':
     #     pp.start()
     #     p.append(pp)
     #
-    # for st in sysStz._stations.keys():
-    #     stName = sysStz._stations[st]._name
-    #     pp = multiprocessing.Process(target=hyDrum, name='HYDRUM_' + st,
-    #                                  args=(sysStz, sysStz._network, stName))
-    #     pp.start()
-    #     p.append(pp)
+    for st in ['LK_BRK0']:#sysStz._stations.keys():
+        stName = sysStz._stations[st]._name
+        pp = multiprocessing.Process(target=hyDrum, name='HYDRUM_' + st,
+                                     args=(sysStz, sysStz._network, stName))
+        pp.start()
+        p.append(pp)
 
 
     sysStz.run('seismic.alarmstst')

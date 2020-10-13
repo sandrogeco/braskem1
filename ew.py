@@ -5,7 +5,7 @@
 
 # #sudo sshfs -o allow_other braskem@80.211.98.179:/uploads /mnt/geoAppServer/
 
-#da home/Dovuments/mSeedTest   /home/sandro/anaconda3/envs/mSeedTest/bin/python /home/sandro/Documents/mSeedTest/drumPlotHyst_1.4_utl.py
+#/home/sandro/anaconda3/envs/braskem/bin/python3.8 /home/sandro/Documents/braskem1/ew.py
 
 import time
 import multiprocessing

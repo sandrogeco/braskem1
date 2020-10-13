@@ -12,12 +12,16 @@ class log():
     def rdLogCluster(self,*args):
         pName=args
         try:
+            tte=[]
             for pp in pName:
                 with open(pp + '.json', 'r') as fp:
                     p = json.load(fp)
-                    self._lastElaborate = UTCDateTime.strptime(p['last'], "%Y-%m-%d %H:%M:%S")
+                    tte.append(UTCDateTime.strptime(p['last'], "%Y-%m-%d %H:%M:%S"))
                     fp.close()
-                    te = self._lastElaborate
+
+            te=np.min(tte)
+
+
         except:
             te = UTCDateTime.now()
             pass
@@ -95,7 +99,11 @@ class sch:
                 time.sleep(np.int(self._sft/2))
             else:
                 #to do
-                fnc(self._actualElaborationTime,*args)
+                try:
+                    fnc(self._actualElaborationTime,*args)
+                except:
+                    print('failed '+pName)
+                    pass
                 self._actualElaborationTime+=self._sft
                 self.l.wrLog(self._actualElaborationTime)
 

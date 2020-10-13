@@ -252,7 +252,8 @@ class alert():
         'erh':0,
         'erz':0,
         'max_amplitude':0,
-        'median_amplitude':0
+        'median_amplitude':0,
+        'mean_amplitude':0
     }
     _log = {
         'lastElab': UTCDateTime.now()
@@ -418,6 +419,7 @@ class alert():
             self._a['station'] = "'"+station+"'"
             self._a['max_amplitude'] =np.max([m['max_amplitude'] for m in aa])
             self._a['median_amplitude'] =np.median([m['median_amplitude'] for m in aa])
+            self._a['mean_amplitude'] = np.mean([m['mean_amplitude'] for m in aa])
             self._a['rate'] = np.sum([m['rate'] for m in aa])
             # fR = np.where(self._rateX >= self._a['rate'])[0]
             # fA = np.where(self._amplY <= self._a['max_amplitude'])[0]
@@ -500,7 +502,7 @@ class alert():
                 if self.getAlerts(te, te, st, evType): # 'ORDER BY utc_time DESC LIMIT 1'):
                     for a in self._aList:
                         fR = np.where(self._rateX >= a['rate'])[0]
-                        fA = np.where(self._amplY <= a['max_amplitude'])[0]
+                        fA = np.where(self._amplY <= a['median_amplitude'])[0]
                         fR = fR[0]
                         fA = fA[0]
                         l= np.int(self._thMatrix[fA, fR])
@@ -624,6 +626,34 @@ class drumPlot(Client):
             print('ops,something wrong in plotting!!')
             return False
 
+    def plotDrum1(self, trace, filename='tmp.png'):
+        try:
+            trace.data = trace.data * 1000 / 3.650539e+08
+            if not os.path.exists(os.path.dirname(filename)):
+                os.makedirs(os.path.dirname(filename))
+            trace.interpolate(sampling_rate=trace.stats['sampling_rate'], time_shift=self._localTimeOffset)
+            trace.plot(type='dayplot',
+                            dpi=dpi,
+                            x_labels_size=int(8 * 100 / int(dpi)),
+                            y_labels_size=int(8 * 100 / int(dpi)),
+                            title_size=int(1000 / int(dpi)),
+                            title=(trace.stats['starttime']).strftime("%Y/%m/%d %H:%M:%S")+' - '+(trace.stats['endtime']).strftime("%Y/%m/%d %H:%M:%S"),
+                            size=(sizex, sizey),
+                            color=('#AF0000', '#00AF00', '#0000AF'),
+                            vertical_scaling_range=yRange,
+                            outfile=filename,
+                            show_y_UTC_label=False,
+                            #handle=True,
+                            time_offset=-3,
+                            data_unit='mm/s',
+                            events=self._events
+                            )
+            return True
+        except:
+            print('ops,something wrong in plotting 1!!')
+            return False
+
+
     def realTimeDrumPlot(self):
         print('RealTime plot start ' + UTCDateTime.now().strftime("%Y%m%d %H%M%S"))
         appTrace = Stream()
@@ -705,54 +735,49 @@ class drumPlot(Client):
         tEnd = te
         tStart=tEnd-60*self._rTWindow
         for b in self._band:
-            tr = self.get_waveforms(network, station, '', 'EH?', tStart, tEnd)
-            tr.merge()
-            tr=tr[0]
-            id = tr.get_id()
-            spl = id.split('.')
-            channel = spl[3]
-
-            fileNameRT = 'RT_' + network + '_' + station + '_' + channel + '_' + str(b) + '.png'
-            appTrace = tr.copy()
-            bb = self._band[b]
-            appTrace.filter('bandpass', freqmin=bb[0], freqmax=bb[1], corners=2, zerophase=True)
-            self.plotDrum(appTrace, self._basePathRT + 'RT/' + fileNameRT)
+            traces = self.get_waveforms(network, station, '', 'EH?', tStart, tEnd)
+            traces.merge()
+            for tr in traces:
+                id = tr.get_id()
+                spl = id.split('.')
+                channel = spl[3]
+                fileNameRT = 'RT_' + network + '_' + station + '_' + channel + '_' + str(b) + '.png'
+                appTrace = tr.copy()
+                bb = self._band[b]
+                appTrace.filter('bandpass', freqmin=bb[0], freqmax=bb[1], corners=2, zerophase=True)
+                self.plotDrum1(appTrace, self._basePathRT + 'RT/' + fileNameRT)
 
 
 
     def singleStationHystDrumPlot(self,te,network,station):
-
-        tEnd = te
         tTrg = te + self._localTimeOffset
-        print('Hyststart ' + te.strftime("%Y%m%d %H%M%S"))
-
-        a=alert(self._alertTable)
-        a.getAlerts(self._tEnd - 3600 * 24, self._tEnd, '*', 'CASP')
-        self._events = [
-            dict(time=UTCDateTime(aa['utc_time']) + self._localTimeOffset, text='CASP ev. mag' + str(aa['magnitudo']))
-            for aa in a._aList]
-
         for h in self._hystType:
             if tTrg.hour % int(h / 60) == 0:
+                print('Hyststart ' + te.strftime("%Y%m%d %H%M%S"))
+                tStart = te - h * 60
+                a = alert(self._alertTable)
+                a.getAlerts(tStart, te, '*', 'CASP')
+                self._events = [
+                    dict(time=UTCDateTime(aa['utc_time']) + self._localTimeOffset,
+                         text='CASP ev. mag' + str(aa['magnitudo']))
+                    for aa in a._aList]
+                traces = self.get_waveforms(network, station, '', 'EH?', tStart, te)
+                traces.merge()
                 for b in self._band:
-                    tStart = tEnd - h * 60
-                    tr=self.get_waveforms(network, station, '', 'EH?',tStart,tEnd)
-                    tr.merge()
-                    tr=tr[0]
-                    id = tr[0].get_id()
-                    spl = id.split('.')
-                    channel = spl[3]
-                    p = network + '/' + station + '/' + channel + '/' + str(tStart.year) + '/' + str(
-                        tStart.month) + '/' + str(
-                        tStart.day) + '/' + str(h) + '/' + str(b)
+                    for tr in traces :
+                        id = tr.get_id()
+                        spl = id.split('.')
+                        channel = spl[3]
+                        p = network + '/' + station + '/' + channel + '/' + str(tStart.year) + '/' + str(
+                            tStart.month) + '/' + str(
+                            tStart.day) + '/' + str(h) + '/' + str(b)
 
-                    fileName = p + '/' + tStart.strftime("%Y%m%d%H") + '00.png'
-                    appTrace = tr.copy()
-                    bb = self._band[b]
-                    appTrace.trim(tStart - self._localTimeOffset, tEnd - self._localTimeOffset, pad=True,
-                                  fill_value=0)
-                    appTrace.filter('bandpass', freqmin=bb[0], freqmax=bb[1], corners=2, zerophase=True)
-                    self.plotDrum(appTrace, self._basePath + fileName)
+                        fileName = p + '/' + tStart.strftime("%Y%m%d%H") + '00.png'
+                        appTrace = tr.copy()
+                        bb = self._band[b]
+                        appTrace.trim(tStart,te, pad=True,fill_value=0)
+                        appTrace.filter('bandpass', freqmin=bb[0], freqmax=bb[1], corners=2, zerophase=True)
+                        self.plotDrum1(appTrace, self._basePath + fileName)
 
     def An(self,table='seismic.alerts'):
         self._elRunning=True
@@ -957,6 +982,7 @@ class drumPlot(Client):
                 a._a['amplitude_ehz'] = np.max(ez)
                 a._a['median_amplitude']=np.median(amA)
                 a._a['max_amplitude']=np.max(amA)
+                a._a['mean_amplitude'] = np.mean(amA)
                 a._a['rate']=len(amA)
                 a.insert()
 
@@ -1178,7 +1204,7 @@ class drumPlot(Client):
         self.rtAlertCASP(te)
 
     def rtAlertCASP(self,te):
-        a=alert()
+        a=alert(self._alertTable)
         a.getAlerts(te-self._rTh['wnd']*3600,te,'*','CASP')
         for aa in a._aList:
             if aa['magnitudo'] > self._rTh['CASP']:  # self._rTh['sft']

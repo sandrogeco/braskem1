@@ -23,8 +23,8 @@ sysStz=seisLib.sysStations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK','seismic.st
 cl = [['LK_BRK0', 'LK_BRK2'], ['LK_BRK1', 'LK_BRK2'], ['LK_BRK1', 'LK_BRK4'], ['LK_BRK3', 'LK_BRK4']]
 
 tForce=UTCDateTime('2020-07-17 00:00:00')
-tForceRaw=0
-tForceHourly=0
+tForceRaw=UTCDateTime('2020-09-01 00:00:00')
+tForceHourly=UTCDateTime('2020-09-01 00:00:00')
 tForceCluster=0
 tForceDrumPlot=UTCDateTime('2020-10-01 00:00:00')
 tForceCASP=0
@@ -40,7 +40,7 @@ except:
 
 def rawCASP(sysStz):
     client = seisLib.drumPlot('/mnt/ide/seed/')
-    client._alertTable='seismic.alertstst'
+    client._alertTable='seismic.alertstst1'
     client._rTh={
         'CASP': 2,
         'wnd': 2/60,
@@ -53,7 +53,7 @@ def rawCASP(sysStz):
 
 
 def hourlyCASP(sysStz,network,station):
-    al=seisLib.alert('seismic.alertstst')
+    al=seisLib.alert('seismic.alertstst1')
 
     al._th = {  # soglie su cui definire rate
         'CASP': -100
@@ -80,12 +80,12 @@ def hourlyCASP(sysStz,network,station):
 def rawProcess(sysStz,network,station):
 
     client = seisLib.drumPlot('/mnt/ide/seed/')
-    client._alertTable='seismic.alertstst'
+    client._alertTable='seismic.alertstst1'
     client._amplAn = {
         'lowFW': [1, 20],
         'highFW': [20, 50],
-        'lowFTh': 0.00001,
-        'highFTh': 0.00001,
+        'lowFTh': 0.00005,
+        'highFTh': 0.00005,
         'sft':1/60,
         'wnd':1/60
     }
@@ -98,7 +98,7 @@ def rawProcess(sysStz,network,station):
 def rtDrum(sysStz,network,station):
 
     client = seisLib.drumPlot('/mnt/ide/seed/')
-    client._alertTable='seismic.alertstst'
+    client._alertTable='seismic.alertstst1'
 
     client._band = {
         'low': [1, 20],
@@ -118,7 +118,7 @@ def rtDrum(sysStz,network,station):
 
 def hyDrum(sysStz, network, station):
     client = seisLib.drumPlot('/mnt/ide/seed/')
-    client._alertTable = 'seismic.alertstst'
+    client._alertTable = 'seismic.alertstst1'
 
     client._band = {
         'low': [1, 20],
@@ -141,7 +141,7 @@ def hyDrum(sysStz, network, station):
 
 def hourlyProcess(sysStz,network,station,type):
 
-    al=seisLib.alert('seismic.alertstst')
+    al=seisLib.alert('seismic.alertstst1')
 
     al._th = {  # soglie su cui definire rate
         'AML': 0.00001,
@@ -171,7 +171,7 @@ def clusterProcess(sysStz,network,cl,type):
 
 
 
-    al=seisLib.alert('seismic.alertstst')
+    al=seisLib.alert('seismic.alertstst1')
 
 
     al._rateX = np.arange(0, 3700, 1)
@@ -190,22 +190,22 @@ def clusterProcess(sysStz,network,cl,type):
 p=[]
 if __name__ == '__main__':
 
-    # #raw casp
-    pp = multiprocessing.Process(target=rawCASP, name='RAW_CASP',
-                                 args=(sysStz,))
-    pp.start()
-    p.append(pp)
-
-    #casp orario
-    pp = multiprocessing.Process(target=hourlyCASP, name='HR_CASP',
-                                 args=(sysStz, sysStz._network, '*'))
-    pp.start()
-    p.append(pp)
+    # # #raw casp
+    # pp = multiprocessing.Process(target=rawCASP, name='RAW_CASP',
+    #                              args=(sysStz,))
+    # pp.start()
+    # p.append(pp)
+    #
+    # #casp orario
+    # pp = multiprocessing.Process(target=hourlyCASP, name='HR_CASP',
+    #                              args=(sysStz, sysStz._network, '*'))
+    # pp.start()
+    # p.append(pp)
 
     # lancia raw amplitude analisys su tutte le stazioni
     for st in sysStz._stations.keys():
         stName =sysStz._stations[st]._name
-        pp=multiprocessing.Process(target=rawProcess, name='RAW_'+st,
+        pp=multiprocessing.Process(target=rawProcess, name='RAW1_'+st,
                                 args=(sysStz,sysStz._network, stName))
         pp.start()
         p.append(pp)
@@ -216,23 +216,23 @@ if __name__ == '__main__':
     # lancia HR AML AMH amplitude analisys su tutte le stazioni
     for st in sysStz._stations.keys():
         stName =sysStz._stations[st]._name
-        pp=multiprocessing.Process(target=hourlyProcess, name='HR_AML_'+st,
+        pp=multiprocessing.Process(target=hourlyProcess, name='HR_AML1_'+st,
                                 args=(sysStz,sysStz._network, stName,"AML"))
         pp.start()
         p.append(pp)
-    for st in sysStz._stations.keys():
-        stName =sysStz._stations[st]._name
-        pp=multiprocessing.Process(target=hourlyProcess, name='HR_AMH_'+st,
-                                args=(sysStz,sysStz._network, stName,"AMH"))
-        pp.start()
-        p.append(pp)
-
-    for cls in cl:
-        clName="__".join(cls)
-        pp=multiprocessing.Process(target=clusterProcess, name='CL_'+clName,
-                                args=(sysStz,sysStz._network, cls,"HR_AML"))
-        pp.start()
-        p.append(pp)
+    # for st in sysStz._stations.keys():
+    #     stName =sysStz._stations[st]._name
+    #     pp=multiprocessing.Process(target=hourlyProcess, name='HR_AMH_'+st,
+    #                             args=(sysStz,sysStz._network, stName,"AMH"))
+    #     pp.start()
+    #     p.append(pp)
+    #
+    # for cls in cl:
+    #     clName="__".join(cls)
+    #     pp=multiprocessing.Process(target=clusterProcess, name='CL_'+clName,
+    #                             args=(sysStz,sysStz._network, cls,"HR_AML"))
+    #     pp.start()
+    #     p.append(pp)
 
         # lancia RTdRUM su tutte le stazioni
     # for st in sysStz._stations.keys():
