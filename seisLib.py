@@ -501,11 +501,10 @@ class alert():
         try:
             print('CLUSTER AN ' + str(te))
             for st in cl:
-
                 if self.getAlerts(te, te, st, evType): # 'ORDER BY utc_time DESC LIMIT 1'):
                     for a in self._aList:
                         fR = np.where(self._rateX >= a['rate'])[0]
-                        fA = np.where(self._amplY <= a['median_amplitude'])[0]
+                        fA = np.where(self._amplY <= a['mean_amplitude'])[0]
                         fR = fR[0]
                         fA = fA[0]
                         l= np.int(self._thMatrix[fA, fR])
@@ -513,6 +512,7 @@ class alert():
                     if l>0:
                         ll.append(l)
                         n += 1
+                print('     st:'+st+'    level='+str(l)+ '    ampl='+str(a['mean_amplitude'])+'   rate='+str(a['rate']))
         except:
             pass
         l=0

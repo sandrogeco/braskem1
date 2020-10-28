@@ -176,7 +176,7 @@ def clusterProcess(sysStz,network,cl,type):
 
 
     al._rateX = np.arange(0, 3700, 1)
-    al._amplY = np.arange(0.01, -0.0001, -0.0001)
+    al._amplY = np.arange(0.00020, -0.0001, -0.00001)
     al._thMatrix = np.zeros([len(al._amplY), len(al._rateX)])
     al._thMatrix[0:np.where(al._amplY > 0.00003)[0][-1], 900:] = 1
     al._thMatrix[0:np.where(al._amplY > 0.00006)[0][-1], 1800:] = 2
@@ -257,3 +257,7 @@ if __name__ == '__main__':
         pp.join()
 
 
+#casp h rate
+#casp mag OK
+#latency OK
+#cluster alert
