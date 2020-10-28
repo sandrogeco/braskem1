@@ -72,7 +72,7 @@ def loc(dstM,r,dec,e,lx,ly,lz):
         return loc(dst,r,dec,e,lx,ly,lz)
 
 
-def locOnGrid(a,tt):
+def locOnGrid(a,tt,mag):
         # aVol = loc(dst, r, 8, e, [0, dst.shape[0]], [0, dst.shape[1]], [0, dst.shape[2]])
         client = drumPlot('/mnt/ide/seed/')
         mm = a['mPos']
@@ -90,15 +90,15 @@ def locOnGrid(a,tt):
             'lat': lat,
             'lon': lon,
             'dpt': z/1000,
-            'mag':1,
+            'mag':mag,
             'note':'error '+str(m)
         }
         client.pushIntEv(ev)
 
-def SARALoc(r,e,t):
-    if np.sum(e)>1:
-        a=loc(dst, r, 8, e, [0, dst.shape[0]], [0, dst.shape[1]], [0, dst.shape[2]])
-        locOnGrid(a,t)
+def SARALoc(r,e,t,mag):
+
+    a=loc(dst, r, 8, e, [0, dst.shape[0]], [0, dst.shape[1]], [0, dst.shape[2]])
+    locOnGrid(a,t,mag)
 
 
 def plottst(total_duration, sampling_frequency):
@@ -125,8 +125,7 @@ def plottst(total_duration, sampling_frequency):
     ax4.grid(True)
     return ax1, ax2, ax3, ax4
 
-
-def run(tStart,tEnd,cth = 0.95,minDur = 1,overLap=10,dec=10):
+def pick(tStart,tEnd,p,a,overLap=10,dec=10):
 
     client = drumPlot('/mnt/ide/seed/')
 
@@ -134,11 +133,80 @@ def run(tStart,tEnd,cth = 0.95,minDur = 1,overLap=10,dec=10):
     tr.merge()
     nts=len(tr)
     tr.remove_response(client._inv)
-    tr.filter('bandpass', freqmin=0.5, freqmax=20, corners=3, zerophase=True)
+    tr.filter('bandpass', freqmin=1, freqmax=8, corners=3, zerophase=True)
     ttr=tr.copy()
+    ttrEnv=tr.copy()
     i=0
     for trace in tr:
-        ttr[i].data= obspy.signal.filter.envelope(trace.data)
+        ttrEnv[i].data= obspy.signal.filter.envelope(trace.data)
+        ttr[i].data=trace.data
+        i+=1
+    ttr.decimate(dec)
+    sampling_frequency = ttr[0].stats['sampling_rate']
+    # sampling_frequency = sampling_frequency / dec
+    n_samples = ttr[0].stats['npts']
+    total_duration = n_samples / sampling_frequency
+    sample_times = np.linspace(0, total_duration, n_samples)
+    ttr=tr.copy()
+    ttrEnv=tr.copy()
+    i=0
+    for trace in tr:
+        ttrEnv[i].data= obspy.signal.filter.envelope(trace.data)
+        ttr[i].data=trace.data
+
+        i+=1
+    ttr.decimate(dec)
+    sampling_frequency = ttr[0].stats['sampling_rate']
+    # sampling_frequency = sampling_frequency / dec
+    n_samples = ttr[0].stats['npts']
+    total_duration = n_samples / sampling_frequency
+    sample_times = np.linspace(0, total_duration, n_samples)
+    ttrEnv.plot()
+
+def cal(p,a):
+    client = drumPlot('/mnt/ide/seed/')
+
+
+    coord={
+        'BRK0': client._inv.get_coordinates('LK.BRK0..EHZ'),
+        'BRK1': client._inv.get_coordinates('LK.BRK1..EHZ'),
+        'BRK2': client._inv.get_coordinates('LK.BRK2..EHZ'),
+        'BRK3': client._inv.get_coordinates('LK.BRK3..EHZ'),
+        'BRK4': client._inv.get_coordinates('LK.BRK4..EHZ'),
+    }
+    nts=len(coord)
+
+    utmCoord=[utm.from_latlon(coord[c]['latitude'],coord[c]['longitude']) for c in coord]
+    utmLats=[u[0] for u in utmCoord]
+    utmLons=[u[1] for u in utmCoord]
+    elev=[coord[c]['elevation'] for c in coord]
+
+    d=[]
+    c=[]
+    for i in range(0,nts):
+       d.append(np.sqrt((utmLats[i]-p['latitude'])**2+(utmLons[i]-p['longitude'])**2))
+
+    u = np.zeros((nts))
+    u[0]=1
+
+    for i in range(1, nts):
+        u[i]=d[0]*a[0]/(d[i]*a[i])
+    return u,d
+
+def run(c,tStart,tEnd,cth = 0.95,minDur = 0.5,overLap=10,dec=10):
+
+    client = drumPlot('/mnt/ide/seed/')
+
+    tr = client.get_waveforms('LK', 'BRK?', '', 'EHZ', tStart - overLap, tEnd + overLap)
+    tr.merge()
+    nts=len(tr)
+    tr.remove_response(client._inv)
+    tr.filter('bandpass', freqmin=1, freqmax=15, corners=3, zerophase=True)
+    ttr=tr.copy()
+    ttrEnv=tr.copy()
+    i=0
+    for trace in tr:
+        ttr[i].data=trace.data*c[i]
         i+=1
     ttr.decimate(dec)
     sampling_frequency = ttr[0].stats['sampling_rate']
@@ -148,32 +216,121 @@ def run(tStart,tEnd,cth = 0.95,minDur = 1,overLap=10,dec=10):
     sample_times = np.linspace(0, total_duration, n_samples)
     tFlt = minDur * sampling_frequency
     ax1, ax2, ax3, ax4 = plottst(total_duration,sampling_frequency)
+    mm=np.zeros((nts,nts),dtype=object)
+    ch=mm.copy()
+    coherence=mm.copy()
+    s1=np.zeros((nts),dtype=object)
+    s2 = np.zeros((nts), dtype=object)
+    mmBool=mm.copy()
+
+    nts2=((nts*nts)-nts)/2
+    coupleTh=3 #nts2/2
     for i in range(0,nts):
         for j in range(i+1,nts):
+            ax1.clear()
+            ax2.clear()
+            ax3.clear()
+            ax4.clear()
+
             print(ttr[i])
             print(ttr[j])
-            coherence, s1, s2, times, frequencies, coif = xwt.xwt_coherence(ttr[i].data, ttr[j].data, sampling_frequency, 12,
-                                                                            True, False)
+            coherence[i,j], s1[i], s2[j], times, frequencies, coif = xwt.xwt_coherence(ttr[i].data, ttr[j].data, sampling_frequency, 12,
+                                                                            True, False,'cmorl15.0-1.0')
 
-            ch = coherence.copy()
-            ch[ch > cth] = 1
-            ch[ch <= cth] = 0
-            ch[frequencies < 0.5, :]=0
-            mm = measure.label(ch, connectivity=2)
-            rp = measure.regionprops(mm)
-            c = []
+            c=coherence[i,j].copy()
+            # c[c > cth] = 1
+            c[c <= cth] = np.nan
+            c[frequencies < 2, :] = np.nan
+            c[:,0:100]=np.nan
+            c[:,len(times)-100:]=np.nan
+            ch[i,j] = c
 
-            for r in rp:
-                if np.abs(r.bbox[2] - r.bbox[0]) < tFlt:
-                    mm[mm == r.label] = 0
-                else:
-                    c.append(r.centroid)
+            s1[i][frequencies < 2, :] = np.nan
+            s2[j][frequencies < 2, :] = np.nan
 
-            ax1.plot(sample_times, ttr[i], color='b');
-            ax1.plot(sample_times, ttr[j], color='r');
-            xwt.spectrogram_plot(coherence, times, frequencies, coif, cth, cmap='jet', norm=LogNorm(), ax=ax2)
-            plt.show()
-            print(i)
+    a = [ch[i, j] for i in range(0, nts) for j in range(i + 1, nts)]
+    a[0]=s1[0]
+    a[1:]=s2[1:]
+    a=np.asarray(a)
+    # s=np.sum(ch)/nts2
+    s=np.nanmax(a,axis=0)
+
+
+    # s[s > cth] = 1
+    # s[s <= cth] = 0
+    s[s<1e-12]=0
+    s[s >= 1e-12] = 1
+
+    meas = measure.label(s, connectivity=2)
+    rp = measure.regionprops(meas)
+    c=[]
+    for r in rp:
+        if np.abs(r.bbox[2] - r.bbox[0]) < tFlt:
+            meas[meas== r.label] = 0
+        # else:
+        #     c.append([np.int(x) for x in r.centroid])
+
+    measF = measure.label(meas, connectivity=2)
+    rpF = measure.regionprops(measF)
+    # xwt.spectrogram_plot(meas, times, frequencies, coif, cth, cmap='jet', norm=LogNorm(), ax=ax4)
+
+    ratios=[]
+    eList=[]
+
+    for region in rpF:
+        r=np.zeros((nts,nts))
+        e=np.zeros((nts,nts))
+        p = np.zeros((nts))*np.nan
+        cc=region.centroid
+        # measTst=measF.copy()
+        # measTst[measF!=region.label]=0
+        # ax1.clear()
+        # xwt.spectrogram_plot(measTst, times, frequencies, coif, 0, cmap='jet', norm=LogNorm(), ax=ax1)
+
+        for i in range(0, nts):
+            for j in range(i + 1, nts):
+                siMean=np.nanmax([s1[i][co[0],co[1]] for co in region.coords])
+                sjMean = np.nanmax([s2[j][co[0], co[1]] for co in region.coords])
+                chMean=np.nanmax([ch[i,j][co[0],co[1]] for co in region.coords])
+                r[i, j] = sjMean/siMean
+                e[i,j]=(siMean>1e-12)and (sjMean>1e-12)#np.round(chMean)
+                p[i]=siMean
+                # r[i,j]=np.sqrt(s2[j][cc[0],cc[1]]/s1[i][cc[0],cc[1]])
+                # e[i,j]=np.round(ch[i,j][cc[0],cc[1]])
+        p[-1]=sjMean
+        e1=np.nansum(e,axis=1)
+        e2=np.nansum(e,axis=0)
+        e3=e1+e2
+        e3[e3<1]=np.nan
+        e3[e3>=1]=1
+        mag=np.nanmax(e3*p)
+        if (np.nansum(e)>=coupleTh) and (mag>5*1e-13):
+            print(str(frequencies[np.int(cc[0])])+' '+str(ts+times[np.int(cc[1])]))
+            print(r)
+            print(e)
+            # input()
+            e[e!=1]=0
+            SARALoc(r, e, ts+times[np.int(cc[1])],mag)
+        ratios.append(r)
+        eList.append(e)
+    plt.show()
+    print('p')
+
+
+
+            # for r in rp:
+            #     if np.abs(r.bbox[2] - r.bbox[0]) < tFlt:
+            #         mm[i,j][mm[i,j] == r.label] = 0
+            #     else:
+            #
+            #         c.append(r.centroid)
+
+    ax1.plot(sample_times, ttr[i], color='b');
+    ax1.plot(sample_times, ttr[j], color='r');
+    xwt.spectrogram_plot(coherence, times, frequencies, coif, cth, cmap='jet', norm=LogNorm(), ax=ax2)
+    xwt.spectrogram_plot(mm[i, j], times, frequencies, coif, cth, cmap='jet', norm=LogNorm(), ax=ax3)
+
+
 
     #
     # cc = np.zeros([len(sysStz._stations), len(sysStz._stations)])
@@ -235,9 +392,53 @@ data=np.load('metadata/dst.npz',allow_pickle=True)
 dst=data['dst']
 dsts=data['dsts']
 grid=data['grid']
-ts=UTCDateTime('2020-09-19 15:00:30')
+
+ts=UTCDateTime('2020-09-04 13:09:00')
+
+ts=UTCDateTime('2020-10-13 23:59:00')
+
+ts=UTCDateTime('2020-09-17 16:10:00')
+
+ts=UTCDateTime('2020-10-05 13:42:00')
+
+ts=UTCDateTime('2020-09-21 13:23:00')
+
+ts=UTCDateTime('2020-09-25 16:09:00')#p3
 
 
-run(ts,ts+120,0.95,1,0)
+ts=UTCDateTime('2020-09-19 15:00:00')#p1
 
 
+
+ts=UTCDateTime('2020-09-21 16:28:00')#p2
+
+#run(ts,ts+180,0.9,0.1,0,10)
+
+p1={
+    'longitude':8933494.93,
+    'latitude':198419.039
+}
+p2={
+    'longitude':8933115.00,
+    'latitude':198629.00
+}
+
+p3={
+    'longitude':8934119.40,
+    'latitude':198330.86
+}
+
+ampl1=[5e-5,5e-5,0.00015,2.7e-5,2.7e-5]
+ampl3=[1e-5,4e-5,1.2e-5,5.5e-5,0.000128]
+u,d=cal(p1,ampl1)
+u3,d3=cal(p3,ampl3)
+
+#calibr result
+c=[ 1.        ,  0.86008597,  1.1899558 ,  0.71319166,  1.48059081]
+
+pick(ts,ts+240,p1,ampl1,0,10)
+c=[1,1,1,1,1]
+
+run(c,ts,ts+180,0.9,0.1,0,10)
+
+print(d)

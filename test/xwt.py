@@ -97,7 +97,7 @@ def xwt_spectrogram(x1, x2, fs, nNotes=12, detrend=True, normalize=True):
 
     return power, times, frequencies, coif
 
-def xwt_coherence(x1, x2, fs, nNotes=12, detrend=True, normalize=True):
+def xwt_coherence(x1, x2, fs, nNotes=12, detrend=True, normalize=True,wl='cmor1.5-1.0'):
     N1 = len(x1)
     N2 = len(x2)
     assert (N1 == N2), "error: arrays not same size"
@@ -130,9 +130,9 @@ def xwt_coherence(x1, x2, fs, nNotes=12, detrend=True, normalize=True):
     ###########################################################################
     # cwt and the frequencies used.
     # Use the complex morelet with bw=1.5 and center frequency of 1.0
-    coef1, freqs1 = pywt.cwt(x1, scales, 'cmor1.5-1.0')
-    coef2, freqs2 = pywt.cwt(x2, scales, 'cmor1.5-1.0')
-    frequencies = pywt.scale2frequency('cmor1.5-1.0', scales) / dt
+    coef1, freqs1 = pywt.cwt(x1, scales,wl)
+    coef2, freqs2 = pywt.cwt(x2, scales, wl)
+    frequencies = pywt.scale2frequency(wl, scales) / dt
 
     ###########################################################################
     # Calculates the cross transform of xs1 and xs2.

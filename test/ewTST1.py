@@ -23,8 +23,8 @@ sysStz=seisLib.sysStations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK','seismic.st
 cl = [['LK_BRK0', 'LK_BRK2'], ['LK_BRK1', 'LK_BRK2'], ['LK_BRK1', 'LK_BRK4'], ['LK_BRK3', 'LK_BRK4']]
 
 tForce=UTCDateTime('2020-07-17 00:00:00')
-tForceRaw=UTCDateTime('2020-09-01 00:00:00')
-tForceHourly=UTCDateTime('2020-09-01 00:00:00')
+tForceRaw=0
+tForceHourly=0
 tForceCluster=0
 tForceDrumPlot=UTCDateTime('2020-10-01 00:00:00')
 tForceCASP=0
@@ -84,8 +84,8 @@ def rawProcess(sysStz,network,station):
     client._amplAn = {
         'lowFW': [1, 20],
         'highFW': [20, 50],
-        'lowFTh': 0.00005,
-        'highFTh': 0.00005,
+        'lowFTh': 0.00003,
+        'highFTh': 0.00003,
         'sft':1/60,
         'wnd':1/60
     }

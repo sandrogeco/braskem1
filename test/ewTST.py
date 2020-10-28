@@ -44,7 +44,8 @@ def rawCASP(sysStz):
     client._rTh={
         'CASP': 2,
         'wnd': 2/60,
-        'sft': 1/60
+        'sft': 1/60,
+        'alON':10/60
     }
     client._sysStations=sysStz
 
@@ -74,7 +75,7 @@ def hourlyCASP(sysStz,network,station):
     al._sysStations=sysStz
     l=log()
     scheduler=sch(al._rTh['sft'],'',tForceHourlyCASP,l.rdLog,("RAW_CASP",))
-    scheduler.schRun(al.hourlyRateMag,(network+'_'+station,'CASP',))
+    scheduler.schRun(al.hourlyRateMag,(station,'CASP',))
 
 
 def rawProcess(sysStz,network,station):
@@ -84,8 +85,8 @@ def rawProcess(sysStz,network,station):
     client._amplAn = {
         'lowFW': [1, 20],
         'highFW': [20, 50],
-        'lowFTh': 0.00001,
-        'highFTh': 0.00001,
+        'lowFTh': 0.00003,
+        'highFTh': 0.00003,
         'sft':1/60,
         'wnd':1/60
     }
@@ -177,9 +178,9 @@ def clusterProcess(sysStz,network,cl,type):
     al._rateX = np.arange(0, 3700, 1)
     al._amplY = np.arange(0.01, -0.0001, -0.0001)
     al._thMatrix = np.zeros([len(al._amplY), len(al._rateX)])
-    al._thMatrix[0:np.where(al._amplY > 0.00004)[0][-1], 5*60:] = 1
-    al._thMatrix[0:np.where(al._amplY > 0.0008)[0][-1], 20*60:] = 2
-    al._thMatrix[0:np.where(al._amplY > 0.002)[0][-1], 40*60:] = 3
+    al._thMatrix[0:np.where(al._amplY > 0.00003)[0][-1], 900:] = 1
+    al._thMatrix[0:np.where(al._amplY > 0.00006)[0][-1], 1800:] = 2
+    al._thMatrix[0:np.where(al._amplY > 0.00012)[0][-1], 2700:] = 3
 
     al._sysStations=sysStz
     l=log()
@@ -254,3 +255,5 @@ if __name__ == '__main__':
 
     for pp in p:
         pp.join()
+
+

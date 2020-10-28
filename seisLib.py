@@ -359,25 +359,28 @@ class alert():
             if a['magnitudo']>self._th[type]:
                 aa.append(a)
 
-        if len(aa)>self._rTh[type]:
-            self._time=te
-            self._a['station'] = "'*'"
-            self._a['event_type'] = "'HR_"+type+"'"
-            self._a['rate'] = len(aa)/self._rTh['wnd']
-            ampl = np.max([a['magnitudo'] for a in aa])
-            self._a['magnitudo']=ampl
-            fR = np.where(self._rateX >= self._a['rate'])[0]
-            fA = np.where(self._amplY <= ampl)[0]
-            fR = fR[0]
-            fA = fA[0]
-            self._a['level'] = np.int(self._thMatrix[fA, fR])
-            print(type+' '+station+' '+str(self._a['rate'])+' '+str(self._a['level']))
-            self.insert()
-            if self._a['level']>0:
-                self._sysStations.insertAlert(te, "'*'", self._a['event_type'], self._a['level']+1, 2*self._rTh['sft'] * 3600,
-                                              'CASP hourly rate alarm ')
 
-            r=True
+        self._time=te
+        self._a['station'] = "'*'"
+        self._a['event_type'] = "'HR_"+type+"'"
+        self._a['rate'] = len(aa)/self._rTh['wnd']
+        try:
+            ampl = np.max([a['magnitudo'] for a in aa])
+        except:
+            ampl=0
+        self._a['magnitudo']=ampl
+        fR = np.where(self._rateX >= self._a['rate'])[0]
+        fA = np.where(self._amplY <= ampl)[0]
+        fR = fR[0]
+        fA = fA[0]
+        self._a['level'] = np.int(self._thMatrix[fA, fR])
+
+        self.insert()
+        if self._a['level']>0:
+            self._sysStations.insertAlert(te, "'*'", self._a['event_type'], self._a['level']+1, 2*self._rTh['sft'] * 3600,
+                                          'CASP hourly rate alarm ')
+
+        r=True
         return r
 
 
@@ -1208,8 +1211,8 @@ class drumPlot(Client):
         a.getAlerts(te-self._rTh['wnd']*3600,te,'*','CASP')
         for aa in a._aList:
             if aa['magnitudo'] > self._rTh['CASP']:  # self._rTh['sft']
-                self._sysStations.insertAlert(aa['utc_time'], aa['station'], "'"+aa['event_type']+"'", 2,
-                                              2 * self._rTh['sft'] * 3600, 'High magnitudo CASP event')
+                self._sysStations.insertAlert(aa['utc_time'], aa['station'], "'"+aa['event_type']+"'", 4,
+                                               self._rTh['alON'] * 3600, 'High magnitudo CASP event')
 
 
 
