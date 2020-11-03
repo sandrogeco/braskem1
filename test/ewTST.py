@@ -1,12 +1,4 @@
 
-# sudo /home/slarchive2.2/./slarchive -v -SDS /mnt/ide/seed/ -x statefile -S LK_BRK?:EH? 172.16.8.10:18000
-
-# /home/Documents/openVPNBraskem/openvpn --config clientBRASKEM__GEOAPP.conf
-
-# #sudo sshfs -o allow_other braskem@80.211.98.179:/uploads /mnt/geoAppServer/
-
-#da home/Dovuments/mSeedTest   /home/sandro/anaconda3/envs/mSeedTest/bin/python /home/sandro/Documents/mSeedTest/drumPlotHyst_1.4_utl.py
-
 import time
 import multiprocessing
 
@@ -20,7 +12,7 @@ import urllib
 import json
 
 sysStz=seisLib.sysStations(['BRK0','BRK1','BRK2','BRK3','BRK4'],'LK','seismic.stationstst')#,'BRK0','BRK2','BRK3','BRK4'
-cl = [['LK_BRK0', 'LK_BRK2'], ['LK_BRK1', 'LK_BRK2'], ['LK_BRK1', 'LK_BRK4'], ['LK_BRK3', 'LK_BRK4']]
+cl = [['LK_BRK3', 'LK_BRK4'],['LK_BRK0', 'LK_BRK2'], ['LK_BRK1', 'LK_BRK2'], ['LK_BRK1', 'LK_BRK4']]
 
 tForce=UTCDateTime('2020-07-17 00:00:00')
 tForceRaw=0
@@ -154,13 +146,15 @@ def hourlyProcess(sysStz,network,station,type):
         'wnd': 1,
         'sft': 0.25
     }
-
-    al._rateX = np.arange(0, 3700, 1)
-    al._amplY = np.arange(0.01, -0.0001, -0.0001)
-    al._thMatrix = np.zeros([len(al._amplY), len(al._rateX)])
-    al._thMatrix[0:np.where(al._amplY > 0.0004)[0][-1], 5:] = 1
-    al._thMatrix[0:np.where(al._amplY > 0.0008)[0][-1], 20:] = 2
-    al._thMatrix[0:np.where(al._amplY > 0.002)[0][-1], 40:] = 3
+    #
+    # al._rateX = np.arange(0, 3700, 1)
+    # al._amplY = np.arange(0.01, -0.0001, -0.0001)
+    # al._thMatrix = np.zeros([len(al._amplY), len(al._rateX)])
+    # al._thMatrix[0:np.where(al._amplY > 0.0004)[0][-1], 5:] = 1
+    # al._thMatrix[0:np.where(al._amplY > 0.0008)[0][-1], 20:] = 2
+    # al._thMatrix[0:np.where(al._amplY > 0.002)[0][-1], 40:] = 3
+    #
+    #
 
     al._sysStations=sysStz
     l=log()
@@ -181,6 +175,9 @@ def clusterProcess(sysStz,network,cl,type):
     al._thMatrix[0:np.where(al._amplY > 0.00003)[0][-1], 900:] = 1
     al._thMatrix[0:np.where(al._amplY > 0.00006)[0][-1], 1800:] = 2
     al._thMatrix[0:np.where(al._amplY > 0.00012)[0][-1], 2700:] = 3
+    # al._thMatrix[0:np.where(al._amplY > 0.00001)[0][-1], 1:] = 1
+    # al._thMatrix[0:np.where(al._amplY > 0.00004)[0][-1], 2:] = 2
+    # al._thMatrix[0:np.where(al._amplY > 0.00005)[0][-1], 30:] = 3
 
     al._sysStations=sysStz
     l=log()

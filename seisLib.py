@@ -413,6 +413,7 @@ class alert():
 
     def hourlyRateAmplitude(self,te,station,type='AML'):
         r=False
+        print(UTCDateTime(te).strftime("%Y-%m-%d %H:%M:%S")+'  '+type + ' '+ station)
         ts=te-3600*self._rTh['wnd']
         self.getAlerts(ts,te,station,type)
         aa=self._aList
@@ -429,7 +430,7 @@ class alert():
             # fR = fR[0]
             # fA = fA[0]
             # self._a['level'] = np.int(self._thMatrix[fA, fR])
-            print(type+' '+station+' '+str(self._a['rate'])+' '+str(self._a['max_amplitude']))
+            print('          '+str(self._a['rate'])+' '+str(self._a['max_amplitude']))
             self.insert()
             r=True
         return r
@@ -498,15 +499,16 @@ class alert():
 
         ll=[]
         n = 0
+
         try:
             print('CLUSTER AN ' + str(te))
             for st in cl:
-                if self.getAlerts(te, te, st, evType): # 'ORDER BY utc_time DESC LIMIT 1'):
+                if self.getAlerts(te-self._rTh['sft']*3600, te-self._rTh['sft']*3600, st, evType): # 'ORDER BY utc_time DESC LIMIT 1'):
                     for a in self._aList:
                         fR = np.where(self._rateX >= a['rate'])[0]
-                        fA = np.where(self._amplY <= a['mean_amplitude'])[0]
+                        fA = np.where(self._amplY > a['mean_amplitude'])[0]
                         fR = fR[0]
-                        fA = fA[0]
+                        fA = fA[-1]
                         l= np.int(self._thMatrix[fA, fR])
 
                     if l>0:
@@ -516,7 +518,7 @@ class alert():
         except:
             pass
         l=0
-        if len(ll) == len(cl):
+        if len(ll) >= len(cl):
             l=np.max(ll)
             for st in cl:
                 self._time=te
@@ -525,8 +527,8 @@ class alert():
                 self._a['level'] = l
                 self.insert()
         #self._sysStations.updateStzggggggggggggggggg(st,'_CL_HR',l)
-        if l>0:
-            self._sysStations.insertAlert(te,[st],self._a['event_type'],l+1,2*self._rTh['sft']*3600,'Cluster hourly rate alarm ')
+            # if l>0:
+                self._sysStations.insertAlert(te,[st],self._a['event_type'],l+1,2*self._rTh['sft']*3600,'Cluster hourly rate alarm ')
 
 class drumPlot(Client):
 
@@ -1172,7 +1174,7 @@ class drumPlot(Client):
     def getCaspTime(self,te):
         p=[]
         try:
-            ts=te-self._rTh['wnd']*3600
+            ts=te-3600
             connection = psycopg2.connect(host='172.16.8.10', port='5432', database='casp_events', user='sismoweb',
                                           password='lun1t3k@@',connect_timeout=10)
             sql = "SELECT event_id, t0, lat, lon, dpt, magWA,reliable,erh,erz FROM auto_eventi where t0>'"+ts.strftime("%Y-%m-%d %H:%M:%S")+"'and t0<'"+te.strftime("%Y-%m-%d %H:%M:%S")+"' order by t0 asc;"
