@@ -514,7 +514,7 @@ class alert():
                     if l>0:
                         ll.append(l)
                         n += 1
-                print('     st:'+st+'    level='+str(l)+ '    ampl='+str(a['mean_amplitude'])+'   rate='+str(a['rate']))
+                    print('     st:'+st+'    level='+str(l)+ '    ampl='+str(a['mean_amplitude'])+'   rate='+str(a['rate']))
         except:
             pass
         l=0
@@ -549,7 +549,7 @@ class drumPlot(Client):
     _lastElaborate=UTCDateTime
     _sysStations = sysStations
     _traces = Stream()
-    _inv = read_inventory("metadata/Braskem_metadata.xml")
+    _inv = read_inventory("../metadata/Braskem_metadata.xml")
     _rtSft = rtSft
     _lastData = UTCDateTime.now()
     _traces = Stream()
@@ -749,6 +749,7 @@ class drumPlot(Client):
                 fileNameRT = 'RT_' + network + '_' + station + '_' + channel + '_' + str(b) + '.png'
                 appTrace = tr.copy()
                 bb = self._band[b]
+                appTrace.trim(tStart, tEnd, pad=True, fill_value=0)
                 appTrace.filter('bandpass', freqmin=bb[0], freqmax=bb[1], corners=2, zerophase=True)
                 self.plotDrum1(appTrace, self._basePathRT + 'RT/' + fileNameRT)
 
@@ -777,7 +778,7 @@ class drumPlot(Client):
                             tStart.month) + '/' + str(
                             tStart.day) + '/' + str(h) + '/' + str(b)
 
-                        fileName = p + '/' + tStart.strftime("%Y%m%d%H") + '00.png'
+                        fileName = p + '/' + (tStart+ self._localTimeOffset).strftime("%Y%m%d%H") + '00.png'
                         appTrace = tr.copy()
                         bb = self._band[b]
                         appTrace.trim(tStart,te, pad=True,fill_value=0)

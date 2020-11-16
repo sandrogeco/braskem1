@@ -13,6 +13,7 @@ from scipy.optimize import curve_fit
 import obspy.signal
 import obspy.signal.cross_correlation
 import obspy.signal.filter
+from obspy.signal.trigger import coincidence_trigger
 import seisLib
 import multiprocessing
 from matplotlib.colors import Normalize, LogNorm, NoNorm
@@ -86,7 +87,6 @@ def locOnGrid(a,tt,mag):
         ev = {
             'id': UTCDateTime(ttt).strftime("%m%d%H%M%S"),
             'time': UTCDateTime(ttt),
-
             'lat': lat,
             'lon': lon,
             'dpt': z/1000,
@@ -95,7 +95,7 @@ def locOnGrid(a,tt,mag):
         }
         client.pushIntEv(ev)
 
-def SARALoc(r,e,t,mag):
+def SARALoc(r,e,t,mag,dst):
 
     a=loc(dst, r, 8, e, [0, dst.shape[0]], [0, dst.shape[1]], [0, dst.shape[2]])
     locOnGrid(a,t,mag)
@@ -388,6 +388,8 @@ def run(c,tStart,tEnd,cth = 0.95,minDur = 0.5,overLap=10,dec=10):
     #
 
 
+
+
 data=np.load('metadata/dst.npz',allow_pickle=True)
 dst=data['dst']
 dsts=data['dsts']
@@ -412,6 +414,8 @@ ts=UTCDateTime('2020-09-19 15:00:00')#p1
 
 ts=UTCDateTime('2020-09-21 16:28:00')#p2
 
+
+ts=UTCDateTime('2020-09-19 15:00:00')#p1
 #run(ts,ts+180,0.9,0.1,0,10)
 
 p1={
@@ -428,17 +432,30 @@ p3={
     'latitude':198330.86
 }
 
-ampl1=[5e-5,5e-5,0.00015,2.7e-5,2.7e-5]
-ampl3=[1e-5,4e-5,1.2e-5,5.5e-5,0.000128]
-u,d=cal(p1,ampl1)
-u3,d3=cal(p3,ampl3)
+# ampl1=[5e-5,5e-5,0.00015,2.7e-5,2.7e-5]
+# ampl3=[1e-5,4e-5,1.2e-5,5.5e-5,0.000128]
+# u,d=cal(p1,ampl1)
+# u3,d3=cal(p3,ampl3)
+#
+# #calibr result
+# c=[ 1.        ,  0.86008597,  1.1899558 ,  0.71319166,  1.48059081]
+#
+# pick(ts,ts+240,p1,ampl1,0,10)
+# c=[1,1,1,1,1]
+#
+# run(c,ts,ts+180,0.9,0.1,0,10)
 
-#calibr result
-c=[ 1.        ,  0.86008597,  1.1899558 ,  0.71319166,  1.48059081]
 
-pick(ts,ts+240,p1,ampl1,0,10)
-c=[1,1,1,1,1]
+client = drumPlot('/mnt/ide/seed/')
 
-run(c,ts,ts+180,0.9,0.1,0,10)
+tr = client.get_waveforms('LK', 'BRK?', '', 'EHZ', ts - 1000, ts + 1000)
+tr.merge()
+nts=len(tr)
+#tr.remove_response(client._inv)
+tr.filter('bandpass', freqmin=1, freqmax=15, corners=3, zerophase=True)
+ttr=tr.copy()
 
-print(d)
+trig = coincidence_trigger("recstalta", 3.5, 1, ttr, 3, sta=0.5, lta=10,
+                          details=True)
+
+print('x')

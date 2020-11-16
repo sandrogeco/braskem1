@@ -1,7 +1,7 @@
 Istruzioni per sistema monitoraggio Maceio
 
 lancia VPN
-sudo /home/Documents/openVPNBraskem/openvpn --config clientBRASKEM__GEOAPP.conf
+sudo openvpn --config /home/Documents/openVPNBraskem/clientBRASKEM__GEOAPP.conf
 
 lancia SLARCHIVE
 sudo /home/slarchive2.2/./slarchive -v -SDS /mnt/ide/seed/ -x statefile -S LK_BRK?:EH? 172.16.8.10:18000
@@ -10,8 +10,8 @@ monta volume di GeoApp
 sudo sshfs -o allow_other braskem@80.211.98.179:/uploads /mnt/geoAppServer/
 
 
-Lancia sft
-#/home/sandro/anaconda3/envs/braskem/bin/python3.8 /home/sandro/Documents/braskem1/ew.py
-
+Lancia sft da braskem1/ew2.0
+#/home/sandro/anaconda3/envs/braskem/bin/python3.8 /home/sandro/Documents/braskem1/ew2.0/ew2.0.py
+psw Geoapp2020!
 
 sta tutto su github sandrogeco
