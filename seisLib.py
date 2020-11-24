@@ -10,7 +10,7 @@ import multiprocessing
 import obspy.signal.polarization
 from obspy import read_inventory
 import obspy.signal
-
+import utm
 
 import json
 import psycopg2
@@ -18,7 +18,10 @@ import time
 import numpy as np
 
 from sch import log
+
+from obspy.signal.trigger import coincidence_trigger
 import urllib.request, json
+
 
 dpi = 100
 sizex = 800
@@ -34,6 +37,11 @@ band = {
 
 rTWindow = 360
 rtSft = 2
+
+data = np.load('../metadata/dst.npz', allow_pickle=True)
+dst = data['dst']
+dsts = data['dsts']
+grid = data['grid']
 
 
 class sysStations():
@@ -253,7 +261,8 @@ class alert():
         'erz':0,
         'max_amplitude':0,
         'median_amplitude':0,
-        'mean_amplitude':0
+        'mean_amplitude':0,
+        'duration':0
     }
     _log = {
         'lastElab': UTCDateTime.now()
@@ -1232,3 +1241,108 @@ class drumPlot(Client):
               e['id'] + "') ON CONFLICT DO NOTHING;"
         connection.cursor().execute(sql)
         connection.commit()
+
+
+    def loc(self,dstM, r, dec, e, lx, ly, lz):
+        dst = np.zeros(dstM.shape, object)
+        dst[:, :, :] = dstM[:, :, :]
+        result = np.ones(dst.shape) * np.Inf
+        le = np.sum(e)
+        for i in np.arange(lx[0], lx[1], dec):
+            for j in np.arange(ly[0], ly[1], dec):
+                for k in np.arange(lz[0], lz[1], dec):
+                    p = r - dst[i, j, k]
+                    # p[e, :] = 0
+                    # p[:, e] = 0
+                    p = p * e
+                    # pp=p[0,:]
+                    result[i, j, k] = np.sqrt(np.trace(np.dot(p, p.T))) / le
+
+        mm = np.unravel_index(np.argmin(result), result.shape)
+        m = np.min(result)
+        if dec == 1:
+
+            rr = {
+                'min': m,
+                'mPos': mm
+
+            }
+            return rr
+        else:
+            sx = (lx[1] - lx[0]) / 4
+            sy = (ly[1] - ly[0]) / 4
+            sz = (lz[1] - lz[0]) / 4
+            lx = [np.int(np.maximum(mm[0] - sx, 0)), np.int(np.minimum(mm[0] + sx, dst.shape[0]))]
+            ly = [np.int(np.maximum(mm[1] - sy, 0)), np.int(np.minimum(mm[1] + sy, dst.shape[1]))]
+            lz = [np.int(np.maximum(mm[2] - sz, 0)), np.int(np.minimum(mm[2] + sz, dst.shape[2]))]
+            dec = np.int(dec / 2)
+            return self.loc(dst, r, dec, e, lx, ly, lz)
+
+    def locOnGrid(self,a, tt, mag):
+        # aVol = loc(dst, r, 8, e, [0, dst.shape[0]], [0, dst.shape[1]], [0, dst.shape[2]])
+        #client = drumPlot('/mnt/ide/seed/')
+        mm = a['mPos']
+        m = a['min']
+        x = grid[0, mm[0], mm[1], mm[2]]
+        y = grid[1, mm[0], mm[1], mm[2]]
+        z = grid[2, mm[0], mm[1], mm[2]]
+        lat, lon = utm.to_latlon(x, y, 25, 'L')
+        ttt = UTCDateTime(tt)
+
+        ev = {
+            'id': UTCDateTime(ttt).strftime("%m%d%H%M%S"),
+            'time': UTCDateTime(ttt),
+            'lat': lat,
+            'lon': lon,
+            'dpt': z / 1000,
+            'mag': mag,
+            'note': 'error ' + str(m)
+        }
+        self.pushIntEv(ev)
+
+    def SARALoc(self,r, e, t, mag, dst):
+
+        a = self.loc(dst, r, 8, e, [0, dst.shape[0]], [0, dst.shape[1]], [0, dst.shape[2]])
+        self.locOnGrid(a, t, mag)
+
+    def coincedenceSTALTA(self, te, network, stations,channel,wnd,trigPar):
+        stName = network + "_" + stations
+
+        teMax = te
+        teMin = te - wnd
+
+        tr=self.get_waveforms(network,stations,'',channel,teMin,teMax)
+
+        tr.merge(fill_value=0)
+        tr.remove_response(self._inv)
+        tr.filter('bandpass', freqmin=trigPar['lowF'], freqmax=trigPar['highF'], corners=2, zerophase=True)
+        print('COI'+te.strftime("'%Y-%m-%d %H:%M:%S'"))
+        trg=coincidence_trigger("recstalta", trigPar['thOn'],trigPar['thOff'], tr, trigPar['nSt'], sta=trigPar['sta'], lta=trigPar['lta'])
+
+        if len(trg)>0:
+            print(trg)
+            for ttr in tr:
+                ttr.data=obspy.signal.filter.envelope(ttr.data)
+            for e in trg:
+                trt=tr.copy().trim(e['time'],e['time']+e['duration'])
+                amp=[]
+                g = np.ones((len(tr), len(tr)))
+                aa=np.zeros((len(tr), len(tr)))
+                i=0
+                for t in trt:
+                    amp.append(np.max(t.data))
+                    if not (t.get_id() in e['trace_ids']):
+                        g[i,:]=0
+                        g[:,i]=0
+                    i+=1
+                for i in range(0,len(amp)):
+                    for j in range(i+1,len(amp)):
+                        aa[i,j]=amp[j]/amp[i]
+
+                self.SARALoc(aa, g, e['time'], 1, dst)
+                a = alert(self._alertTable)
+                a._time = e['time']
+                a._a['event_type'] = "'STALTA'"
+                a._a['station'] = "'" +'_'.join(e['stations']) + "'"
+                a._a['duration']=e['duration']
+                a.insert(False)

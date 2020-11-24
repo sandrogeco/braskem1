@@ -1,0 +1,78 @@
+
+from seisLib import drumPlot
+from seisLib import log
+import utm
+import numpy as np
+from obspy import UTCDateTime
+
+
+
+data=np.load('metadata/dst.npz',allow_pickle=True)
+dst=data['dst']
+dsts=data['dsts']
+grid=data['grid']
+
+def loc(dstM,r,dec,e,lx,ly,lz):
+    dst=np.zeros(dstM.shape,object)
+    dst[:,:,:]=dstM[:,:,:]
+    result = np.ones(dst.shape)*np.Inf
+    le=np.sum(e)
+    for i in np.arange(lx[0], lx[1], dec):
+        for j in np.arange(ly[0], ly[1], dec):
+            for k in np.arange(lz[0], lz[1], dec):
+                p = r - dst[i, j, k]
+                # p[e, :] = 0
+                # p[:, e] = 0
+                p=p*e
+                # pp=p[0,:]
+                result[i, j, k] = np.sqrt(np.trace(np.dot(p,p.T)))/le
+
+    mm = np.unravel_index(np.argmin (result), result.shape)
+    m = np.min(result)
+    if dec==1:
+
+        rr={
+            'min':m,
+            'mPos':mm
+
+        }
+        return rr
+    else:
+        sx=(lx[1]-lx[0])/4
+        sy= (ly[1] - ly[0])/4
+        sz = (lz[1] - lz[0])/4
+        lx=[np.int(np.maximum(mm[0]-sx,0)),np.int(np.minimum(mm[0]+sx,dst.shape[0]))]
+        ly = [np.int(np.maximum(mm[1] -sy, 0)), np.int(np.minimum(mm[1] +sy, dst.shape[1]))]
+        lz = [np.int(np.maximum(mm[2] - sz, 0)), np.int(np.minimum(mm[2] + sz, dst.shape[2]))]
+        dec=np.int(dec/2)
+        return loc(dst,r,dec,e,lx,ly,lz)
+
+
+def locOnGrid(a,tt,mag):
+        # aVol = loc(dst, r, 8, e, [0, dst.shape[0]], [0, dst.shape[1]], [0, dst.shape[2]])
+        client = drumPlot('/mnt/ide/seed/')
+        mm = a['mPos']
+        m = a['min']
+        x = grid[0, mm[0], mm[1], mm[2]]
+        y = grid[1, mm[0], mm[1], mm[2]]
+        z = grid[2, mm[0], mm[1], mm[2]]
+        lat, lon = utm.to_latlon(x, y, 25, 'L')
+        ttt=UTCDateTime(tt)
+
+        ev = {
+            'id': UTCDateTime(ttt).strftime("%m%d%H%M%S"),
+            'time': UTCDateTime(ttt),
+            'lat': lat,
+            'lon': lon,
+            'dpt': z/1000,
+            'mag':mag,
+            'note':'error '+str(m)
+        }
+        client.pushIntEv(ev)
+
+def SARALoc(r,e,t,mag,dst):
+
+    a=loc(dst, r, 8, e, [0, dst.shape[0]], [0, dst.shape[1]], [0, dst.shape[2]])
+    locOnGrid(a,t,mag)
+
+
